@@ -52,7 +52,8 @@ case class RocketCoreParams(
   mvendorid: Int = 0, // 0 means non-commercial implementation
   mimpid: Int = 0x20181004, // release date in BCD
   mulDiv: Option[MulDivParams] = Some(MulDivParams()),
-  fpu: Option[FPUParams] = Some(FPUParams())
+  fpu: Option[FPUParams] = Some(FPUParams()),
+  debugROB: Boolean = false // if enabled, uses a C++ debug ROB to generate trace-with-wdata
 ) extends CoreParams {
   val lgPauseCycles = 5
   val haveFSDirty = false
@@ -63,7 +64,7 @@ case class RocketCoreParams(
   val retireWidth: Int = 1
   val instBits: Int = if (useCompressed) 16 else 32
   val lrscCycles: Int = 80 // worst case is 14 mispredicted branches + slop
-  val traceHasWdata: Boolean = false // ooo wb, so no wdata in trace
+  val traceHasWdata: Boolean = debugROB // ooo wb, so no wdata in trace unless debugROB is used
   override val customIsaExt = Some("Xrocket") // CEASE instruction
   override def minFLen: Int = fpu.map(_.minFLen).getOrElse(32)
   override def customCSRs(implicit p: Parameters) = new RocketCustomCSRs
@@ -807,7 +808,22 @@ class Rocket(tile: RocketTile)(implicit p: Parameters) extends CoreModule()(p)
   csr.io.rw.addr := wb_reg_inst(31,20)
   csr.io.rw.cmd := CSR.maskCmd(wb_reg_valid, wb_ctrl.csr)
   csr.io.rw.wdata := wb_reg_wdata
-  io.trace := csr.io.trace
+  if (rocketParams.debugROB) {
+    val csr_trace_with_wdata = WireInit(csr.io.trace(0))
+    csr_trace_with_wdata.wdata.get := rf_wdata
+    DebugROB.pushTrace(clock, reset,
+      io.hartid, csr_trace_with_wdata,
+      (wb_ctrl.wfd || (wb_ctrl.wxd && wb_waddr =/= 0.U)) && !csr.io.trace(0).exception,
+      wb_ctrl.wxd && wb_wen && !wb_set_sboard,
+      wb_waddr + Mux(wb_ctrl.wfd, 32.U, 0.U))
+
+    io.trace(0) := DebugROB.popTrace(clock, reset, io.hartid)
+
+    DebugROB.pushWb(clock, reset, io.hartid, ll_wen, rf_waddr, rf_wdata)
+  } else {
+    io.trace := csr.io.trace
+  }
+
   for (((iobpw, wphit), bp) <- io.bpwatch zip wb_reg_wphit zip csr.io.bp) {
     iobpw.valid(0) := wphit
     iobpw.action := bp.control.action
