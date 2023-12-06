@@ -151,6 +151,125 @@ class BackwardTweakUpdateOperator extends Module with QaramParams {
     io.new_tk := res_vec.asTypeOf(UInt(64.W))
 }
 
+class OperatorIO extends Bundle {
+    val is = Input(UInt(64.W))
+    val tk = Input(UInt(64.W))
+    val round_zero = Input(Bool())
+    val out = Output(UInt(64.W))
+}
 
+class ForwardOperator extends Module with QaramParams {
+    val io = IO(new OperatorIO)
+
+    val tmp_is = Wire(UInt(64.W))
+    tmp_is := io.is^io.tk
+
+    val cell = Wire(Vec(16,UInt(4.W)))
+    cell := tmp_is.asTypeOf(Vec(16,UInt(4.W)))
+
+    val perm = Wire(Vec(16,UInt(4.W)))
+    for(i <- 0 util 16){
+        perm(15 - i) := cell(15 - t(i))
+    }
+
+    val mix_column_is = Wire(UInt(64.W))
+    val mix_column_operator = Module(new MixColumnOperator)
+    mix_column_operator.io.in = perm.asTypeOf(UInt(64.W))
+    mix_column_is := mix_column_operator.io.out
+
+    val mux_is = Wire(UInt(64.W))
+    mux_is = Mux(io.round_zero,tmp_is,mix_column_is)
+    val cell_final = Wire(Vec(16,UInt(4.W)))
+    cell_final := mux_is.asTypeOf(Vec(16,UInt(4.W)))
+
+    val res_vec = Wire(Vec(16,UInt(4.W)))
+    for(i <- 0 util 4){
+        res_vec(15 - i) := sbox(sbox_number)(cell_final(15 - i))
+    }
+
+    io.out := res_vec.asTypeOf(UInt(64.W))
+}
+
+class BackwardOperator extends Module with QaramParams{
+    val io = IO(new OperatorIO)
+    val cell = Wire(Vec(16,UInt(4.W)))
+    cell := io.is.asTypeOf(Vec(16,UInt(4.W)))
+
+    val sub_cell = Wire(Vec(16,UInt(4.W)))
+    for(i <- 0 util 16){
+        sub_cell(15 - i) := sbox_inv(sbox_number)(cell(15 - i))
+    }
+
+    val mix_column_is = Wire(UInt(64.W))
+    val mix_column = Module(new MixColumnOperator)
+    mix_column.io.in = sub_cell.asTypeOf(UInt(64.W))
+    mix_column_is = mix_column.io.out
+
+    val mixc = Wire(Vec(16,UInt(4.W)))
+    mixc := mix_column_is.asTypeOf(Vec(16,UInt(4.W)))
+
+    val shuffle_cell = Wire(Vec(16,UInt(4.W)))
+    for(i <- 0 util 16){
+        shuffle_cell(15 - i) := mixc(15 - t_inv(i))
+    }
+
+    val final_cell = Wire(Vec(16,UInt(4.W)))
+    final_cell := Mux(io.round_zero,sub_cell,shuffle_cell)
+    val tmp_is = Wire(UInt(64.W))
+    tmp_is := final_cell.asTypeOf(UInt(64.W))
+
+    io.out := tmp_is ^ io.tk
+}
+
+class PseudoReflectOperatorIO extends Bundle {
+    val is = Input(UInt(64.W))
+    val tk = Input(UInt(64.W))
+    val out = Output(UInt(64.W))
+}
+
+class PseudoReflectOperator extends Module with QaramParams {
+    val io = IO(new PseudoReflectOperatorIO)
+    val cell = Wire(Vec(16,UInt(4.W)))
+    val perm = Wire(Vec(16,UInt(4.W)))
+    cell := io.is.asTypeOf(Vec(16,UInt(4.W)))
+
+    for(i <- 0 util 16){
+        perm(15 - i) := cell(15 - t(i))
+    }
+
+    val mix_column_res = Wire(UInt(64.W))
+    val mix_column = MOdule(new MixColumnOperator)
+    mix_column.in := perm.asTypeOf(UInt(64.W))
+    mix_column_res := mix_column.out
+
+    val mix_column_cell = Wire(Vec(16,UInt(4.W)))
+    val cell_final = Wire(Vec(16,UInt(4.W)))
+    val perm_final = Wire(Vec(16,UInt(4.W)))
+    mix_column_cell := mix_column_res.asTypeOf(Vec(16,UInt(4.W)))
+    for(i <- 0 util 16){
+        val key_base = 4*(15 - i)
+        cell_final(15 - i) := mix_column_cell(15 - i) ^ tk(key_base+3, key_base)
+        perm_final(15 - i) := cell_final(15 - t_inv(i))
+    }
+
+    io.out := perm_final.asTypeOf(UInt(64.W))
+}
+
+class MetaBundle(max_round: Int) extends Bundle with QarmaParams {
+    val valid = Bool()
+    val done = Bool()
+    val pointer = UInt(log2Ceil(code_map_width * (max_round * 2 + 2)).W)
+}
+
+class DataBundle(max_round: Int, step_len: Int) extends Bundle with QarmaParams {
+    val code = UInt((code_map_width * ((max_round + step_len - 1) / step_len * 2 + 2)).W)
+    val step_end = UInt((log2Ceil(step_len) * ((max_round + step_len - 1) / step_len * 2 + 2)).W)
+    val is = UInt(64.W)
+    val tk = UInt(64.W)
+    val k0 = UInt(64.W)
+    val k1 = UInt(64.W)
+    val w0 = UInt(64.W)
+    val w1 = UInt(64.W)
+}
 
 
