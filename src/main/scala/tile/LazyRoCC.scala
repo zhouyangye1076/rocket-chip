@@ -402,7 +402,8 @@ object OpcodeSet {
   def custom1 = new OpcodeSet(Seq("b0101011".U))
   def custom2 = new OpcodeSet(Seq("b1011011".U))
   def custom3 = new OpcodeSet(Seq("b1111011".U))
-  def all = custom0 | custom1 | custom2 | custom3
+  def pec_ext = new OpcodeSet(Seq("b1101011".U))
+  def all = custom0 | custom1 | custom2 | custom3 | pec_ext
 }
 
 class RoccCommandRouter(opcodes: Seq[OpcodeSet])(implicit p: Parameters)
