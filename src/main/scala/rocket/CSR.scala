@@ -588,6 +588,43 @@ class CSRFile(
   val reg_hpmcounter = io.counters.zipWithIndex.map { case (c, i) =>
     WideCounter(CSR.hpmWidth, c.inc, reset = false, inhibit = reg_mcountinhibit(CSR.firstHPM+i)) }
 
+  //the 128 bit master key {mcrmkeyh,mcrmkeyl}
+  //the 7 general key from a to g
+  val reg_mcrmkeyl = RegInit(0.U(xLen.W))
+  val reg_mcrmkeyh = RegInit(0.U(xLen.W))
+  val reg_scrtkeyl = RegInit(0.U(xLen.W))
+  val reg_scrtkeyh = RegInit(0.U(xLen.W))
+  val reg_scrakeyl = RegInit(0.U(xLen.W))
+  val reg_scrakeyh = RegInit(0.U(xLen.W))
+  val reg_scrbkeyl = RegInit(0.U(xLen.W))
+  val reg_scrbkeyh = RegInit(0.U(xLen.W))
+  val reg_scrckeyl = RegInit(0.U(xLen.W))
+  val reg_scrckeyh = RegInit(0.U(xLen.W))
+  val reg_scrdkeyl = RegInit(0.U(xLen.W))
+  val reg_scrdkeyh = RegInit(0.U(xLen.W))
+  val reg_screkeyl = RegInit(0.U(xLen.W))
+  val reg_screkeyh = RegInit(0.U(xLen.W))
+  val reg_scrfkeyl = RegInit(0.U(xLen.W))
+  val reg_scrfkeyh = RegInit(0.U(xLen.W))
+
+  // import chisel3.util.experimental.BoringUtils
+  // BoringUtils.addSource(reg_mcrmkeyl,"csr_mcrmkeyl")
+  // BoringUtils.addSource(reg_mcrmkeyh,"csr_mcrmkeyh")
+  // BoringUtils.addSource(reg_scrtkeyl,"csr_scrtkeyl")
+  // BoringUtils.addSource(reg_scrtkeyh,"csr_scrtkeyh")
+  // BoringUtils.addSource(reg_scrakeyl,"csr_scrakeyl")
+  // BoringUtils.addSource(reg_scrakeyh,"csr_scrakeyh")
+  // BoringUtils.addSource(reg_scrbkeyl,"csr_scrbkeyl")
+  // BoringUtils.addSource(reg_scrbkeyh,"csr_scrbkeyh")
+  // BoringUtils.addSource(reg_scrckeyl,"csr_scrckeyl")
+  // BoringUtils.addSource(reg_scrckeyh,"csr_scrckeyh")
+  // BoringUtils.addSource(reg_scrdkeyl,"csr_scrdkeyl")
+  // BoringUtils.addSource(reg_scrdkeyh,"csr_scrdkeyh")
+  // BoringUtils.addSource(reg_screkeyl,"csr_screkeyl")
+  // BoringUtils.addSource(reg_screkeyh,"csr_screkeyh")
+  // BoringUtils.addSource(reg_scrfkeyl,"csr_scrfkeyl")
+  // BoringUtils.addSource(reg_scrfkeyh,"csr_scrfkeyh")
+  
   val mip = WireDefault(reg_mip)
   mip.lip := (io.interrupts.lip: Seq[Bool])
   mip.mtip := io.interrupts.mtip
@@ -782,6 +819,23 @@ class CSRFile(
       read_mapping += (CSRs.pmpaddr0 + i) -> pmp.readAddr
   }
 
+  read_mapping += CSRs.mcrmkeyl -> reg_mcrmkeyl
+  read_mapping += CSRs.mcrmkeyh -> reg_mcrmkeyh
+  read_mapping += CSRs.scrtkeyl -> reg_scrtkeyl
+  read_mapping += CSRs.scrtkeyh -> reg_scrtkeyh
+  read_mapping += CSRs.scrakeyl -> reg_scrakeyl
+  read_mapping += CSRs.scrakeyh -> reg_scrakeyh
+  read_mapping += CSRs.scrbkeyl -> reg_scrbkeyl
+  read_mapping += CSRs.scrbkeyh -> reg_scrbkeyh
+  read_mapping += CSRs.scrckeyl -> reg_scrckeyl
+  read_mapping += CSRs.scrckeyh -> reg_scrckeyh
+  read_mapping += CSRs.scrdkeyl -> reg_scrdkeyl
+  read_mapping += CSRs.scrdkeyh -> reg_scrdkeyh
+  read_mapping += CSRs.screkeyl -> reg_screkeyl
+  read_mapping += CSRs.screkeyh -> reg_screkeyh
+  read_mapping += CSRs.scrfkeyl -> reg_scrfkeyl
+  read_mapping += CSRs.scrfkeyh -> reg_scrfkeyh
+
   // implementation-defined CSRs
   def generateCustomCSR(csr: CustomCSR, csr_io: CustomCSRIO) = {
     require(csr.mask >= 0 && csr.mask.bitLength <= xLen)
@@ -899,7 +953,7 @@ class CSRFile(
     io_dec.fp_illegal := io.status.fs === 0.U || reg_mstatus.v && reg_vsstatus.fs === 0.U || !reg_misa('f'-'a')
     io_dec.vector_illegal := io.status.vs === 0.U || reg_mstatus.v && reg_vsstatus.vs === 0.U || !reg_misa('v'-'a')
     io_dec.fp_csr := decodeFast(fp_csrs.keys.toList)
-    io_dec.rocc_illegal := io.status.xs === 0.U || reg_mstatus.v && reg_vsstatus.xs === 0.U || !reg_misa('x'-'a')
+    io_dec.rocc_illegal := false.B //io.status.xs === 0.U || reg_mstatus.v && reg_vsstatus.xs === 0.U || !reg_misa('x'-'a')
     val csr_addr_legal = reg_mstatus.prv >= CSR.mode(addr) ||
       usingHypervisor.B && !reg_mstatus.v && reg_mstatus.prv === PRV.S.U && CSR.mode(addr) === PRV.H.U
     val csr_exists = decodeAny(read_mapping)
@@ -1351,6 +1405,23 @@ class CSRFile(
       when (decoded_addr(CSRs.scounteren)) { reg_scounteren := wdata }
       when (decoded_addr(CSRs.senvcfg))    { reg_senvcfg.write(wdata) }
     }
+
+    when (decoded_addr(CSRs.mcrmkeyl)) { reg_mcrmkeyl := wdata }
+    when (decoded_addr(CSRs.mcrmkeyh)) { reg_mcrmkeyh := wdata }
+    when (decoded_addr(CSRs.scrtkeyl)) { reg_scrtkeyl := wdata }
+    when (decoded_addr(CSRs.scrtkeyh)) { reg_scrtkeyh := wdata }
+    when (decoded_addr(CSRs.scrakeyl)) { reg_scrakeyl := wdata }
+    when (decoded_addr(CSRs.scrakeyh)) { reg_scrakeyh := wdata }
+    when (decoded_addr(CSRs.scrbkeyl)) { reg_scrbkeyl := wdata }
+    when (decoded_addr(CSRs.scrbkeyh)) { reg_scrbkeyh := wdata }
+    when (decoded_addr(CSRs.scrckeyl)) { reg_scrckeyl := wdata }
+    when (decoded_addr(CSRs.scrckeyh)) { reg_scrckeyh := wdata }
+    when (decoded_addr(CSRs.scrdkeyl)) { reg_scrdkeyl := wdata }
+    when (decoded_addr(CSRs.scrdkeyh)) { reg_scrdkeyh := wdata }
+    when (decoded_addr(CSRs.screkeyl)) { reg_screkeyl := wdata }
+    when (decoded_addr(CSRs.screkeyh)) { reg_screkeyh := wdata }
+    when (decoded_addr(CSRs.scrfkeyl)) { reg_scrfkeyl := wdata }
+    when (decoded_addr(CSRs.scrfkeyh)) { reg_scrfkeyh := wdata }
 
     if (usingHypervisor) {
       when (decoded_addr(CSRs.hstatus)) {

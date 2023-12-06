@@ -816,7 +816,6 @@ object Instructions {
   def XPERM4             = BitPat("b0010100??????????010?????0110011")
   def XPERM8             = BitPat("b0010100??????????100?????0110011")
   def ZEXT_H             = BitPat("b000010000000?????100?????0111011")
-
 }
 object Causes {
   val misaligned_fetch = 0x0
@@ -1292,6 +1291,24 @@ object CSRs {
   val mhpmcounter29h = 0xb9d
   val mhpmcounter30h = 0xb9e
   val mhpmcounter31h = 0xb9f
+
+  val mcrmkeyl = 0x7f0
+  val mcrmkeyh = 0x7f1
+  val scrtkeyl = 0x5f0
+  val scrtkeyh = 0x5f1
+  val scrakeyl = 0x5f2
+  val scrakeyh = 0x5f3
+  val scrbkeyl = 0x5f4
+  val scrbkeyh = 0x5f5
+  val scrckeyl = 0x5f6
+  val scrckeyh = 0x5f7
+  val scrdkeyl = 0x5f8
+  val scrdkeyh = 0x5f9
+  val screkeyl = 0x5fa
+  val screkeyh = 0x5fb
+  val scrfkeyl = 0x5fc
+  val scrfkeyh = 0x5fd
+
   val all = {
     val res = collection.mutable.ArrayBuffer[Int]()
     res += fflags
@@ -1598,6 +1615,22 @@ object CSRs {
     res += mhartid
     res += mconfigptr
     res += mtopi
+    res += mcrmkeyl
+    res += mcrmkeyh
+    res += scrtkeyl
+    res += scrtkeyh
+    res += scrakeyl
+    res += scrakeyh
+    res += scrbkeyl
+    res += scrbkeyh
+    res += scrckeyl
+    res += scrckeyh
+    res += scrdkeyl
+    res += scrdkeyh
+    res += screkeyl
+    res += screkeyh
+    res += scrfkeyl
+    res += scrfkeyh
     res.toArray
   }
   val all32 = {
