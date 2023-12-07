@@ -3,7 +3,7 @@ package freechips.rocketchip.rocc.qaram
 import chisel3._
 import chisel3.util._
 
-trait QaramParams {
+trait QarmaParams {
     val debug = false
     val ppldbg = false
     val superscalar = false
@@ -71,12 +71,12 @@ trait QaramParams {
     )
 }
 
-class MixColumnOperatorIO extends BUndle {
+class MixColumnOperatorIO extends Bundle {
     val in = Input(UInt(64.W))
     val out = Output(UInt(64.W))
 }
 
-class MixColumnOperator extends Module with QaramParams {
+class MixColumnOperator extends Module with QarmaParams {
     val io = IO(new MixColumnOperatorIO)
     
     val perm = Wire(Vec(16,UInt(4.W)))
@@ -105,7 +105,7 @@ class TweakIO extends Bundle {
     val new_tk = Input(UInt(64.W))
 }
 
-class ForwardTweakUpdateOperator extends Module with QaramParams {
+class ForwardTweakUpdateOperator extends Module with QarmaParams {
     val io = IO(new TweakIO)
     val tmp_vec = Wire(Vec(16,UInt(4.W)))
     val res_vec = Wire(Vec(16,UInt(4.W)))
@@ -128,7 +128,7 @@ class ForwardTweakUpdateOperator extends Module with QaramParams {
     io.new_tk := res_vec.asTypeOf(UInt(64.W))
 }
 
-class BackwardTweakUpdateOperator extends Module with QaramParams {
+class BackwardTweakUpdateOperator extends Module with QarmaParams {
     val io = IO(new TweakIO)
     val tmp_vec = Wire(Vec(16,UInt(4.W)))
     val res_vec = Wire(Vec(16,UInt(4.W)))
@@ -158,7 +158,7 @@ class OperatorIO extends Bundle {
     val out = Output(UInt(64.W))
 }
 
-class ForwardOperator extends Module with QaramParams {
+class ForwardOperator extends Module with QarmaParams {
     val io = IO(new OperatorIO)
 
     val tmp_is = Wire(UInt(64.W))
@@ -190,7 +190,7 @@ class ForwardOperator extends Module with QaramParams {
     io.out := res_vec.asTypeOf(UInt(64.W))
 }
 
-class BackwardOperator extends Module with QaramParams{
+class BackwardOperator extends Module with QarmaParams{
     val io = IO(new OperatorIO)
     val cell = Wire(Vec(16,UInt(4.W)))
     cell := io.is.asTypeOf(Vec(16,UInt(4.W)))
@@ -227,7 +227,7 @@ class PseudoReflectOperatorIO extends Bundle {
     val out = Output(UInt(64.W))
 }
 
-class PseudoReflectOperator extends Module with QaramParams {
+class PseudoReflectOperator extends Module with QarmaParams {
     val io = IO(new PseudoReflectOperatorIO)
     val cell = Wire(Vec(16,UInt(4.W)))
     val perm = Wire(Vec(16,UInt(4.W)))
@@ -262,7 +262,13 @@ class MetaBundle(max_round: Int) extends Bundle with QarmaParams {
 }
 
 class DataBundle(max_round: Int, step_len: Int) extends Bundle with QarmaParams {
+    //describe what the FSM should do on each cycle by code_width
+    //the full stage consist of max_round*forward+reflect+max_round*backword+end
+    //the unit can process step_len stage forward and backward in one cycle
+    //so the final cycle is ((max_round + step_len - 1) / step_len * 2 + 2)
+    //the state describle length is code_map_width * ((max_round + step_len - 1) / step_len * 2 + 2)
     val code = UInt((code_map_width * ((max_round + step_len - 1) / step_len * 2 + 2)).W)
+    //when to stop when remaining stage number is smaller than step_len
     val step_end = UInt((log2Ceil(step_len) * ((max_round + step_len - 1) / step_len * 2 + 2)).W)
     val is = UInt(64.W)
     val tk = UInt(64.W)
@@ -272,4 +278,137 @@ class DataBundle(max_round: Int, step_len: Int) extends Bundle with QarmaParams 
     val w1 = UInt(64.W)
 }
 
+class ExecutionContext(max_round: Int = 7, depth: Int=0, port: Int = 0, step_len: Int)
+    extends MultiIOModule with QarmaParams {
+    
+    if(port != 0 && port != 1 && port != 2){
+        println("Variable read_port in ExecutionContext should be in [1, 2].")
+        sys.exit(-1)
+    }
 
+    //the pipeline process unit in unit
+    //the unit can process slot_depth instruction together
+    val slot_depth = if(depth == 0){ if(superscalar) 2 else 1 } else depth
+    val read_write_port = if (port == 0) slot_depth else port
+    val code_width = code_map_width * ((max_round + step_len - 1) / step_len * 2 + 2)
+    val valid_width = 1
+    val done_width = 1
+    val data_width = 64 * 6
+    val pointer_width = log2Ceil(code_width)
+    val data_slot_width = new DataBundle(max_round, step_len).getWidth
+    val meta_slot_width = new MetaBundle(max_round).getWidth
+
+    val input = IO(new Bundle {
+        val new_data = Input(Vec(slot_depth, new DataBundle(max_round, step_len)))
+        val new_meta = Input(Vec(slot_depth, new MetaBundle(max_round)))
+        val update = Input(Vec(slot_depth, Bool()))
+    })
+    val output = IO(new Bundle {
+        val old_data = Input(Vec(slot_depth, new DataBundle(max_round, step_len)))
+        val old_meta = Input(Vec(slot_depth, new MetaBundle(max_round)))
+    })
+
+    val data = RegInit(VecInit(Seq.fill(slot_depth)(0.U(data_slot_width.W))))
+    val meta = RegInit(VecInit(Seq.fill(slot_depth)(0.U(meta_slot_width.W))))
+
+    for(i <- 0 util slot_depth){
+        when(input.update(i)){
+            meta(i) := input.new_meta(i).asUInt
+            data(i) := input.new_data(i).asUInt
+        }
+    }
+
+    for(i <- 0 util slot_depth){
+        output.old_meta := meta(i).asTypeOf(new MetaBundle(max_round))
+        output.old_data := data(i).asTypeOf(new DataBundle(max_round,step_len))
+    }
+}
+
+trait QarmaParamsIO extends MultiIOModule with QarmaParams {
+    val input = IO(Flipped(Decoupled(new Bundle{
+        val encrypt = Bool()
+        val keyh = UInt(64.W)
+        val keyl = UInt(64.W)
+        val tweak = UInt(64.W)
+        val text = UInt(64.W)
+        val actual_round = UInt(3.W)
+    })))
+    val output = IO(Decoupled(new Bundle{
+        val result = UInt(64.W)
+    }))
+}
+
+class QarmaSingleCycle(max_round: Int = 7) extends QarmaParamsIO {
+    val mix_column = Module(new MixColumnOperator)
+    mix_column.io.in := input.bits.keyl
+    val w0 = Mux(input.bits.encrypt, input.bits.keyh, o_operation(input.bits.keyh))
+    val k0 = Mux(input.bits.encrypt, input.bits.keyl, input.bits.keyl^alpha.asUInt)
+    val w1 = Mux(input.bits.encrypt, o_operation(input.bits.keyh), input.bits.keyh)
+    val k1 = Mux(input.bits.encrypt, nput.bits.keyl, mix_column.io.out)
+
+    val is_vec = Wire(Vec(max_round * 2 + 4, UInt(64.W)))
+    val tk_vec = Wire(Vec(max_round * 2 + 4, UInt(64.W)))
+    val forward_operator_vec = Array.fill(max_round + 1)(Module(new ForwardOperator).io)
+    val forward_tweak_update_operator_vec = Array.fill(max_round)(Module(new ForwardTweakUpdateOperator).io)
+    val reflector = Module(new PseudoReflectOperator).io
+    val backward_operator_vec = Array.fill(max_round + 1)(Module(new BackwardOperator).io)
+    val backward_tweak_update_operator_vec = Array.fill(max_round)(Module(new BackwardTweakUpdateOperator).io)
+    var wire_index = 0
+    var module_index = 0
+
+    is_vec(wire_index) := input.bits.text ^ w0
+    tk_vec(wire_index) := input.bits.tweak
+    log(0, is_vec(wire_index), tk_vec(wire_index))
+    for(i <- 0 util max_round){
+        forward_operator_vec(module_index).is := is_vec(wire_index)
+        forward_operator_vec(module_index).tk := tk_vec(wire_index) ^ k0 ^ c(i.asUInt)
+        forward_operator_vec(module_index).round_zero := i.asUInt === 0.U
+        forward_tweak_update_operator_vec(module_index).old_tk := tk_vec(wire_index)
+        wire_index = wire_index + 1
+        is_vec(wire_index) := Mux(i.asUInt < input.bits.actual_round, forward_operator_vec(module_index).out, is_vec(wire_index - 1))
+        tk_vec(wire_index) := Mux(i.asUInt < input.bits.actual_round, forward_tweak_update_operator_vec(module_index).new_tk, tk_vec(wire_index - 1))
+        module_index = module_index + 1
+        log(wire_index, is_vec(wire_index), tk_vec(wire_index))
+    }
+
+    forward_operator_vec(module_index).is := is_vec(wire_index)
+    forward_operator_vec(module_index).tk := tk_vec(wire_index) ^ w1
+    forward_operator_vec(module_index).round_zero := false.B
+    wire_index = wire_index + 1
+    is_vec(wire_index) := forward_operator_vec(module_index).out
+    tk_vec(wire_index) := tk_vec(wire_index - 1)
+    log(wire_index, is_vec(wire_index), tk_vec(wire_index))
+
+    reflector.is := is_vec(wire_index)
+    reflector.tk := k1
+    wire_index = wire_index + 1
+    is_vec(wire_index) := reflector.out
+    tk_vec(wire_index) := tk_vec(wire_index - 1)
+    log(wire_index, is_vec(wire_index), tk_vec(wire_index))
+
+    backward_operator_vec(module_index).is := is_vec(wire_index)
+    backward_operator_vec(module_index).tk := tk_vec(wire_index) ^ w0
+    backward_operator_vec(module_index).round_zero := false.B
+    wire_index = wire_index + 1
+    is_vec(wire_index) := backward_operator_vec(module_index).out
+    tk_vec(wire_index) := tk_vec(wire_index - 1)
+    log(wire_index, is_vec(wire_index), tk_vec(wire_index))
+    module_index = 0
+
+    for(j <- 0 util max_round){
+        val i = max_round -j -1
+        backward_tweak_update_operator_vec(module_index).old_tk := tk_vec(wire_index)
+        tk_vec(wire_index + 1) := Mux(i.asUInt < input.bits.actual_round, backward_tweak_update_operator_vec(module_index).new_tk, tk_vec(wire_index))
+        backward_operator_vec(module_index).is := is_vec(wire_index)
+        backward_operator_vec(module_index).tk := tk_vec(wire_index + 1) ^ k0 ^ alpha.asUInt ^ c(i.asUInt)
+        backward_operator_vec(module_index).round_zero := i.asUInt === 0.U
+        is_vec(wire_index + 1) := Mux(i.asUInt < input.bits.actual_round, backward_operator_vec(module_index).out, is_vec(wire_index))
+        wire_index = wire_index + 1
+        module_index = module_index + 1
+        log(wire_index, is_vec(wire_index), tk_vec(wire_index))
+    }
+
+    output.bits.result := is_vec(wire_index) ^ w1
+    output.valid := true.B
+    input.ready := true.B
+}
