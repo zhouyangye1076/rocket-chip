@@ -412,3 +412,132 @@ class QarmaSingleCycle(max_round: Int = 7) extends QarmaParamsIO {
     output.valid := true.B
     input.ready := true.B
 }
+
+class QarmaMultiCycle(max_round: Int = 7) extends QarmaParamsIO {
+    val mix_column = Module(new MixColumnOperator)
+    mix_column.io.in := input.bits.keyl
+    val w0 = Mux(input.bits.encrypt, input.bits.keyh, o_operation(input.bits.keyh))
+    val k0 = Mux(input.bits.encrypt, input.bits.keyl, input.bits.keyl^alpha.asUInt)
+    val w1 = Mux(input.bits.encrypt, o_operation(input.bits.keyh), input.bits.keyh)
+    val k1 = Mux(input.bits.encrypt, input.bits.keyl, mix_column.io.out)
+
+    val is_vec = Wire(Vec(max_round * 2 + 5, UInt(64.W)))
+    val tk_vec = Wire(Vec(max_round * 2 + 5, UInt(64.W)))
+    val forward_operator_vec = Array.fill(max_round + 1)(Module(new ForwardOperator).io)
+    val forward_tweak_update_operator_vec = Array.fill(max_round)(Module(new ForwardTweakUpdateOperator).io)
+    val reflector = Module(new PseudoReflectOperator).io
+    val backward_operator_vec = Array.fill(max_round + 1)(Module(new BackwardOperator).io)
+    val backward_tweak_update_operator_vec = Array.fill(max_round)(Module(new BackwardTweakUpdateOperator).io)
+    var wire_index = 0
+    var module_index = 0
+
+    var temp_index = new Array[Int](3)
+    val stall_table = Wire(Vec(4, Bool()))
+    //internal register
+    //5-stage pipeline: load-forward-reflect-backward-out
+    val busy_table = RegInit(VecInit(Seq.fill(4)(false.B)))
+    val round_table = RegInit(VecInit(Seq.fill(4)(0.U(3.W))))
+    val is_regs = RegInit(VecInit(Seq.fill(4)(0.U((64).W))))
+    val tk_regs = RegInit(VecInit(Seq.fill(4)(0.U((64).W))))
+    val w0_regs = RegInit(VecInit(Seq.fill(4)(0.U((64).W))))
+    val w1_regs = RegInit(VecInit(Seq.fill(4)(0.U((64).W))))
+    val k0_regs = RegInit(VecInit(Seq.fill(4)(0.U((64).W))))
+    val k1_regs = RegInit(VecInit(Seq.fill(4)(0.U((64).W))))
+
+    is_vec(wire_index) := is_regs(0)
+    tk_vec(wire_index) := tk_regs(0)
+    log(0, is_vec(wire_index), tk_vec(wire_index))
+    for(i <- 0 until max_round){
+        forward_operator_vec(module_index).is := is_vec(wire_index)
+        forward_operator_vec(module_index).tk := tk_vec(wire_index) ^ k0_regs(0) ^ c(i.asUInt)
+        forward_operator_vec(module_index).round_zero := i.asUInt === 0.U
+        forward_tweak_update_operator_vec(module_index).old_tk := tk_vec(wire_index)
+        wire_index = wire_index + 1
+        is_vec(wire_index) := Mux(i.asUInt < round_table(0), forward_operator_vec(module_index).out, is_vec(wire_index - 1))
+        tk_vec(wire_index) := Mux(i.asUInt < round_table(0), forward_tweak_update_operator_vec(module_index).new_tk, tk_vec(wire_index - 1))
+        module_index = module_index + 1
+        log(wire_index, is_vec(wire_index), tk_vec(wire_index))
+    }
+    temp_index(0) = wire_index
+
+    forward_operator_vec(module_index).is := is_regs(1)
+    forward_operator_vec(module_index).tk := tk_regs(1) ^ w1_regs(1)
+    forward_operator_vec(module_index).round_zero := false.B
+    wire_index = wire_index + 1
+    is_vec(wire_index) := forward_operator_vec(module_index).out
+    tk_vec(wire_index) := tk_vec(wire_index - 1)
+    log(wire_index, is_vec(wire_index), tk_vec(wire_index))
+
+    reflector.is := is_vec(wire_index)
+    reflector.tk := k1_regs(1)
+    wire_index = wire_index + 1
+    is_vec(wire_index) := reflector.out
+    tk_vec(wire_index) := tk_vec(wire_index - 1)
+    log(wire_index, is_vec(wire_index), tk_vec(wire_index))
+
+    backward_operator_vec(module_index).is := is_vec(wire_index)
+    backward_operator_vec(module_index).tk := tk_vec(wire_index) ^ w0_regs(1)
+    backward_operator_vec(module_index).round_zero := false.B
+    wire_index = wire_index + 1
+    is_vec(wire_index) := backward_operator_vec(module_index).out
+    tk_vec(wire_index) := tk_vec(wire_index - 1)
+    log(wire_index, is_vec(wire_index), tk_vec(wire_index))
+    module_index = 0
+    temp_index(1) = wire_index
+
+    wire_index = wire_index + 1
+    is_vec(wire_index) := is_regs(2)
+    tk_vec(wire_index) := tk_regs(2)
+    for(j <- 0 until max_round){
+        val i = max_round -j -1
+        backward_tweak_update_operator_vec(module_index).old_tk := tk_vec(wire_index)
+        tk_vec(wire_index + 1) := Mux(i.asUInt < input.bits.actual_round, backward_tweak_update_operator_vec(module_index).new_tk, tk_vec(wire_index))
+        backward_operator_vec(module_index).is := is_vec(wire_index)
+        backward_operator_vec(module_index).tk := tk_vec(wire_index + 1) ^ k0_regs(2) ^ alpha.asUInt ^ c(i.asUInt)
+        backward_operator_vec(module_index).round_zero := i.asUInt === 0.U
+        is_vec(wire_index + 1) := Mux(i.asUInt < input.bits.actual_round, backward_operator_vec(module_index).out, is_vec(wire_index))
+        wire_index = wire_index + 1
+        module_index = module_index + 1
+        log(wire_index, is_vec(wire_index), tk_vec(wire_index))
+    }
+    temp_index(2) = wire_index
+
+    for(i <- 0 until 4){
+        if(i == 3){
+            stall_table(i) := Mux(busy_table(i), !output.ready, false.B)
+        } else {
+            stall_table(i) := Mux(busy_table(i), stall_table(i + 1), false.B)
+        }
+        if(i == 0){
+            when(!stall_table(i)){
+                busy_table(i) := input.valid
+                round_table(i) := input.bits.actual_round
+                is_regs(i) := input.bits.text ^ w0
+                tk_regs(i) := input.bits.tweak
+                w0_regs(i) := w0
+                w1_regs(i) := w1
+                k0_regs(i) := k0
+                k1_regs(i) := k1
+            }
+        } else {
+            when(!stall_table(i)){
+                busy_table(i) := busy_table(i - 1)
+                round_table(i) := round_table(i - 1)
+                is_regs(i) := is_vec(temp_index(i - 1))
+                tk_regs(i) := tk_vec(temp_index(i - 1))
+                w0_regs(i) := w0_regs(i - 1)
+                w1_regs(i) := w1_regs(i - 1)
+                k0_regs(i) := k0_regs(i - 1)
+                k1_regs(i) := k1_regs(i - 1)
+            }
+        }
+    }
+
+    output.bits.result := is_regs(3) ^ w1_regs(3)
+    output.valid := busy_table(3)
+    input.ready := !stall_table(3)
+}
+
+object Driver extends App {
+  (new chisel3.stage.ChiselStage).emitVerilog(new QarmaMultiCycle, args)
+}
