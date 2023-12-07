@@ -465,7 +465,7 @@ class QarmaMultiCycle(max_round: Int = 7) extends QarmaParamsIO {
     forward_operator_vec(module_index).round_zero := false.B
     wire_index = wire_index + 1
     is_vec(wire_index) := forward_operator_vec(module_index).out
-    tk_vec(wire_index) := tk_vec(wire_index - 1)
+    tk_vec(wire_index) := tk_regs(1)
     log(wire_index, is_vec(wire_index), tk_vec(wire_index))
 
     reflector.is := is_vec(wire_index)
@@ -491,11 +491,11 @@ class QarmaMultiCycle(max_round: Int = 7) extends QarmaParamsIO {
     for(j <- 0 until max_round){
         val i = max_round -j -1
         backward_tweak_update_operator_vec(module_index).old_tk := tk_vec(wire_index)
-        tk_vec(wire_index + 1) := Mux(i.asUInt < input.bits.actual_round, backward_tweak_update_operator_vec(module_index).new_tk, tk_vec(wire_index))
+        tk_vec(wire_index + 1) := Mux(i.asUInt < round_table(2), backward_tweak_update_operator_vec(module_index).new_tk, tk_vec(wire_index))
         backward_operator_vec(module_index).is := is_vec(wire_index)
         backward_operator_vec(module_index).tk := tk_vec(wire_index + 1) ^ k0_regs(2) ^ alpha.asUInt ^ c(i.asUInt)
         backward_operator_vec(module_index).round_zero := i.asUInt === 0.U
-        is_vec(wire_index + 1) := Mux(i.asUInt < input.bits.actual_round, backward_operator_vec(module_index).out, is_vec(wire_index))
+        is_vec(wire_index + 1) := Mux(i.asUInt < round_table(2), backward_operator_vec(module_index).out, is_vec(wire_index))
         wire_index = wire_index + 1
         module_index = module_index + 1
         log(wire_index, is_vec(wire_index), tk_vec(wire_index))
@@ -538,6 +538,6 @@ class QarmaMultiCycle(max_round: Int = 7) extends QarmaParamsIO {
     input.ready := !stall_table(3)
 }
 
-object Driver extends App {
-  (new chisel3.stage.ChiselStage).emitVerilog(new QarmaMultiCycle, args)
-}
+// object Driver extends App {
+//   (new chisel3.stage.ChiselStage).emitVerilog(new QarmaMultiCycle, args)
+// }
