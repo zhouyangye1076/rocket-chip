@@ -85,8 +85,8 @@ class MixColumnOperator extends Module with QarmaParams {
     val tmp_vec = Wire(Vec(16,Vec(4,UInt(4.W))))
     val res_vec = Wire(Vec(16,UInt(4.W)))
 
-    for(x<- 0 util 4; y <- 0 util 4){
-        for(j <- 0 util 4){
+    for(x<- 0 until 4; y <- 0 until 4){
+        for(j <- 0 until 4){
             val a = perm(15 - (4 * j + y)).asUInt
             val b = M(4 * x + j)
             when(b.asUInt =/= 0.U){
@@ -102,7 +102,7 @@ class MixColumnOperator extends Module with QarmaParams {
 
 class TweakIO extends Bundle {
     val old_tk = Input(UInt(64.W))
-    val new_tk = Input(UInt(64.W))
+    val new_tk = Output(UInt(64.W))
 }
 
 class ForwardTweakUpdateOperator extends Module with QarmaParams {
@@ -113,11 +113,11 @@ class ForwardTweakUpdateOperator extends Module with QarmaParams {
     val cell = Wire(Vec(16,UInt(4.W)))
     cell := io.old_tk.asTypeOf(Vec(16,UInt(4.W)))
 
-    for(i <- 0 util 16){
+    for(i <- 0 until 16){
         tmp_vec(15 - i) := cell(15 - h(i))
     }
 
-    for(i <- 0 util 16){
+    for(i <- 0 until 16){
         if(Set(0,1,3,4,8,11,13).contains(i)){
             res_vec(15 - i) := lfsr_operation(tmp_vec(15 - i))
         }else{
@@ -136,7 +136,7 @@ class BackwardTweakUpdateOperator extends Module with QarmaParams {
     val cell = Wire(Vec(16,UInt(4.W)))
     cell := io.old_tk.asTypeOf(Vec(16,UInt(4.W)))
 
-    for(i <- 0 util 16){
+    for(i <- 0 until 16){
         if(Set(0,1,3,4,8,11,13).contains(i)){
             tmp_vec(15 - i) := lfsr_inv_operation(cell(15 - i))
         }else{
@@ -144,7 +144,7 @@ class BackwardTweakUpdateOperator extends Module with QarmaParams {
         }
     }
     
-    for(i <- 0 util 16){
+    for(i <- 0 until 16){
         res_vec(15 - i) := tmp_vec(15 - h_inv(i))
     }
 
@@ -168,22 +168,22 @@ class ForwardOperator extends Module with QarmaParams {
     cell := tmp_is.asTypeOf(Vec(16,UInt(4.W)))
 
     val perm = Wire(Vec(16,UInt(4.W)))
-    for(i <- 0 util 16){
+    for(i <- 0 until 16){
         perm(15 - i) := cell(15 - t(i))
     }
 
     val mix_column_is = Wire(UInt(64.W))
     val mix_column_operator = Module(new MixColumnOperator)
-    mix_column_operator.io.in = perm.asTypeOf(UInt(64.W))
+    mix_column_operator.io.in := perm.asTypeOf(UInt(64.W))
     mix_column_is := mix_column_operator.io.out
 
     val mux_is = Wire(UInt(64.W))
-    mux_is = Mux(io.round_zero,tmp_is,mix_column_is)
+    mux_is := Mux(io.round_zero,tmp_is,mix_column_is)
     val cell_final = Wire(Vec(16,UInt(4.W)))
     cell_final := mux_is.asTypeOf(Vec(16,UInt(4.W)))
 
     val res_vec = Wire(Vec(16,UInt(4.W)))
-    for(i <- 0 util 4){
+    for(i <- 0 until 16){
         res_vec(15 - i) := sbox(sbox_number)(cell_final(15 - i))
     }
 
@@ -196,20 +196,20 @@ class BackwardOperator extends Module with QarmaParams{
     cell := io.is.asTypeOf(Vec(16,UInt(4.W)))
 
     val sub_cell = Wire(Vec(16,UInt(4.W)))
-    for(i <- 0 util 16){
+    for(i <- 0 until 16){
         sub_cell(15 - i) := sbox_inv(sbox_number)(cell(15 - i))
     }
 
     val mix_column_is = Wire(UInt(64.W))
     val mix_column = Module(new MixColumnOperator)
-    mix_column.io.in = sub_cell.asTypeOf(UInt(64.W))
-    mix_column_is = mix_column.io.out
+    mix_column.io.in := sub_cell.asTypeOf(UInt(64.W))
+    mix_column_is := mix_column.io.out
 
     val mixc = Wire(Vec(16,UInt(4.W)))
     mixc := mix_column_is.asTypeOf(Vec(16,UInt(4.W)))
 
     val shuffle_cell = Wire(Vec(16,UInt(4.W)))
-    for(i <- 0 util 16){
+    for(i <- 0 until 16){
         shuffle_cell(15 - i) := mixc(15 - t_inv(i))
     }
 
@@ -233,22 +233,22 @@ class PseudoReflectOperator extends Module with QarmaParams {
     val perm = Wire(Vec(16,UInt(4.W)))
     cell := io.is.asTypeOf(Vec(16,UInt(4.W)))
 
-    for(i <- 0 util 16){
+    for(i <- 0 until 16){
         perm(15 - i) := cell(15 - t(i))
     }
 
     val mix_column_res = Wire(UInt(64.W))
-    val mix_column = MOdule(new MixColumnOperator)
-    mix_column.in := perm.asTypeOf(UInt(64.W))
-    mix_column_res := mix_column.out
+    val mix_column = Module(new MixColumnOperator)
+    mix_column.io.in := perm.asTypeOf(UInt(64.W))
+    mix_column_res := mix_column.io.out
 
     val mix_column_cell = Wire(Vec(16,UInt(4.W)))
     val cell_final = Wire(Vec(16,UInt(4.W)))
     val perm_final = Wire(Vec(16,UInt(4.W)))
     mix_column_cell := mix_column_res.asTypeOf(Vec(16,UInt(4.W)))
-    for(i <- 0 util 16){
+    for(i <- 0 until 16){
         val key_base = 4*(15 - i)
-        cell_final(15 - i) := mix_column_cell(15 - i) ^ tk(key_base+3, key_base)
+        cell_final(15 - i) := mix_column_cell(15 - i) ^ io.tk(key_base+3, key_base)
         perm_final(15 - i) := cell_final(15 - t_inv(i))
     }
 
@@ -311,14 +311,14 @@ class ExecutionContext(max_round: Int = 7, depth: Int=0, port: Int = 0, step_len
     val data = RegInit(VecInit(Seq.fill(slot_depth)(0.U(data_slot_width.W))))
     val meta = RegInit(VecInit(Seq.fill(slot_depth)(0.U(meta_slot_width.W))))
 
-    for(i <- 0 util slot_depth){
+    for(i <- 0 until slot_depth){
         when(input.update(i)){
             meta(i) := input.new_meta(i).asUInt
             data(i) := input.new_data(i).asUInt
         }
     }
 
-    for(i <- 0 util slot_depth){
+    for(i <- 0 until slot_depth){
         output.old_meta := meta(i).asTypeOf(new MetaBundle(max_round))
         output.old_data := data(i).asTypeOf(new DataBundle(max_round,step_len))
     }
@@ -344,7 +344,7 @@ class QarmaSingleCycle(max_round: Int = 7) extends QarmaParamsIO {
     val w0 = Mux(input.bits.encrypt, input.bits.keyh, o_operation(input.bits.keyh))
     val k0 = Mux(input.bits.encrypt, input.bits.keyl, input.bits.keyl^alpha.asUInt)
     val w1 = Mux(input.bits.encrypt, o_operation(input.bits.keyh), input.bits.keyh)
-    val k1 = Mux(input.bits.encrypt, nput.bits.keyl, mix_column.io.out)
+    val k1 = Mux(input.bits.encrypt, input.bits.keyl, mix_column.io.out)
 
     val is_vec = Wire(Vec(max_round * 2 + 4, UInt(64.W)))
     val tk_vec = Wire(Vec(max_round * 2 + 4, UInt(64.W)))
@@ -359,7 +359,7 @@ class QarmaSingleCycle(max_round: Int = 7) extends QarmaParamsIO {
     is_vec(wire_index) := input.bits.text ^ w0
     tk_vec(wire_index) := input.bits.tweak
     log(0, is_vec(wire_index), tk_vec(wire_index))
-    for(i <- 0 util max_round){
+    for(i <- 0 until max_round){
         forward_operator_vec(module_index).is := is_vec(wire_index)
         forward_operator_vec(module_index).tk := tk_vec(wire_index) ^ k0 ^ c(i.asUInt)
         forward_operator_vec(module_index).round_zero := i.asUInt === 0.U
@@ -395,7 +395,7 @@ class QarmaSingleCycle(max_round: Int = 7) extends QarmaParamsIO {
     log(wire_index, is_vec(wire_index), tk_vec(wire_index))
     module_index = 0
 
-    for(j <- 0 util max_round){
+    for(j <- 0 until max_round){
         val i = max_round -j -1
         backward_tweak_update_operator_vec(module_index).old_tk := tk_vec(wire_index)
         tk_vec(wire_index + 1) := Mux(i.asUInt < input.bits.actual_round, backward_tweak_update_operator_vec(module_index).new_tk, tk_vec(wire_index))
