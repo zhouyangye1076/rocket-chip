@@ -6,10 +6,6 @@ import freechips.rocketchip.config._
 import freechips.rocketchip.tile._
 import freechips.rocketchip.rocc.qarma._
 
-object PECInst {
-  val opcode = BitPat("b?????????????????????????1101011")
-}
-
 class KeySelect(val nRoCCCSRs: Int = 0)(implicit p: Parameters) extends Module{
   io = IO(new Bundle{
     val csrs = Flipped(Vec(nRoCCCSRs, new CustomCSRIO))
@@ -70,7 +66,25 @@ class KeySelect(val nRoCCCSRs: Int = 0)(implicit p: Parameters) extends Module{
 class PointerEncryption(opcodes: OpcodeSet)(implicit p: Patermeters)
     extends LazyRoCC(opcodes)
     with HasCoreParameters {
-        override lazy val module = new PointerEncryptionMultiCycleImp(this)
+      val roccCSRs = Seq(
+        CustomCSR.constant(0x7f0,0),
+        CustomCSR.constant(0x7f1,0),
+        CustomCSR.constant(0x5f0,0),
+        CustomCSR.constant(0x5f1,0),
+        CustomCSR.constant(0x5f2,0),
+        CustomCSR.constant(0x5f3,0),
+        CustomCSR.constant(0x5f4,0),
+        CustomCSR.constant(0x5f5,0),
+        CustomCSR.constant(0x5f6,0),
+        CustomCSR.constant(0x5f7,0),
+        CustomCSR.constant(0x5f8,0),
+        CustomCSR.constant(0x5f9,0),
+        CustomCSR.constant(0x5fa,0),
+        CustomCSR.constant(0x5fb,0),
+        CustomCSR.constant(0x5fc,0),
+        CustomCSR.constant(0x5fd,0)
+      )
+      override lazy val module = new PointerEncryptionMultiCycleImp(this)
 }
 
 class PointerEncryptionSingleCycleImp(outer: PointerEncryption)(implicit p: Parameters)
@@ -94,7 +108,7 @@ class PointerEncryptionSingleCycleImp(outer: PointerEncryption)(implicit p: Para
   val mask = Wire(Vec(8,UInt(8.U)))
   val mask_text = Wire(UInt(64.W))
   for(i <- 0 until 8){
-    mask(8 - i) := Array.fill(8)(i.asUInt >= begin && i.asUInt <= end)
+    mask(7 - i) := Array.fill(8)(i.asUInt >= begin && i.asUInt <= end)
   }
   mask_text := mask.asTypeOf(UInt(64.W))
 
@@ -109,14 +123,14 @@ class PointerEncryptionSingleCycleImp(outer: PointerEncryption)(implicit p: Para
   io.resp.bits.data                   := pec_engine.output.bits.result
 
   val except_examine = Wire(Bool())
-  except_examine := Mux(pec_engine.output.bits.decrypt, (pec_engine.output.bits.result & mask_text) =/= pec_engine.output.bits.result, false.B)
+  except_examine := Mux(pec_engine.output.bits.decrypt, (pec_engine.output.bits.result & ~mask_text) =/= 0.U(64.W), false.B)
 
   io.cmd.ready  := io.resp.ready
   io.busy       := io.cmd.valid
   io.resp.valid := io.cmd.valid
 
   // Disable unused interfaces
-  io.interrupt      := false.B
+  io.interrupt      := except_examine
   io.mem.req.valid  := false.B
 }
 
