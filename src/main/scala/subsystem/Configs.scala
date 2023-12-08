@@ -367,6 +367,15 @@ class WithRoccExample extends Config((site, here, up) => {
     })
 })
 
+class WithPECRocc extends Config((site, here, up) => {
+  case BuildRoCC => List(
+    (p: Parameters) => {
+        import freechips.rocketchip.rocc.pec._
+        val pec_engine = LazyModule(new PointerEncryption(OpcodeSet.pec_ext)(p))
+        pec_engine
+    })
+})
+
 class WithDefaultBtb extends Config((site, here, up) => {
   case TilesLocated(InSubsystem) => up(TilesLocated(InSubsystem), site) map {
     case tp: RocketTileAttachParams => tp.copy(tileParams = tp.tileParams.copy(
