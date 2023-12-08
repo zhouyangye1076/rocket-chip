@@ -819,22 +819,22 @@ class CSRFile(
       read_mapping += (CSRs.pmpaddr0 + i) -> pmp.readAddr
   }
 
-  read_mapping += CSRs.mcrmkeyl -> reg_mcrmkeyl
-  read_mapping += CSRs.mcrmkeyh -> reg_mcrmkeyh
-  read_mapping += CSRs.scrtkeyl -> reg_scrtkeyl
-  read_mapping += CSRs.scrtkeyh -> reg_scrtkeyh
-  read_mapping += CSRs.scrakeyl -> reg_scrakeyl
-  read_mapping += CSRs.scrakeyh -> reg_scrakeyh
-  read_mapping += CSRs.scrbkeyl -> reg_scrbkeyl
-  read_mapping += CSRs.scrbkeyh -> reg_scrbkeyh
-  read_mapping += CSRs.scrckeyl -> reg_scrckeyl
-  read_mapping += CSRs.scrckeyh -> reg_scrckeyh
-  read_mapping += CSRs.scrdkeyl -> reg_scrdkeyl
-  read_mapping += CSRs.scrdkeyh -> reg_scrdkeyh
-  read_mapping += CSRs.screkeyl -> reg_screkeyl
-  read_mapping += CSRs.screkeyh -> reg_screkeyh
-  read_mapping += CSRs.scrfkeyl -> reg_scrfkeyl
-  read_mapping += CSRs.scrfkeyh -> reg_scrfkeyh
+  read_mapping += CustomCSRs.mcrmkeyl -> reg_mcrmkeyl
+  read_mapping += CustomCSRs.mcrmkeyh -> reg_mcrmkeyh
+  read_mapping += CustomCSRs.scrtkeyl -> reg_scrtkeyl
+  read_mapping += CustomCSRs.scrtkeyh -> reg_scrtkeyh
+  read_mapping += CustomCSRs.scrakeyl -> reg_scrakeyl
+  read_mapping += CustomCSRs.scrakeyh -> reg_scrakeyh
+  read_mapping += CustomCSRs.scrbkeyl -> reg_scrbkeyl
+  read_mapping += CustomCSRs.scrbkeyh -> reg_scrbkeyh
+  read_mapping += CustomCSRs.scrckeyl -> reg_scrckeyl
+  read_mapping += CustomCSRs.scrckeyh -> reg_scrckeyh
+  read_mapping += CustomCSRs.scrdkeyl -> reg_scrdkeyl
+  read_mapping += CustomCSRs.scrdkeyh -> reg_scrdkeyh
+  read_mapping += CustomCSRs.screkeyl -> reg_screkeyl
+  read_mapping += CustomCSRs.screkeyh -> reg_screkeyh
+  read_mapping += CustomCSRs.scrfkeyl -> reg_scrfkeyl
+  read_mapping += CustomCSRs.scrfkeyh -> reg_scrfkeyh
 
   // implementation-defined CSRs
   def generateCustomCSR(csr: CustomCSR, csr_io: CustomCSRIO) = {
@@ -1406,22 +1406,22 @@ class CSRFile(
       when (decoded_addr(CSRs.senvcfg))    { reg_senvcfg.write(wdata) }
     }
 
-    when (decoded_addr(CSRs.mcrmkeyl)) { reg_mcrmkeyl := wdata }
-    when (decoded_addr(CSRs.mcrmkeyh)) { reg_mcrmkeyh := wdata }
-    when (decoded_addr(CSRs.scrtkeyl)) { reg_scrtkeyl := wdata }
-    when (decoded_addr(CSRs.scrtkeyh)) { reg_scrtkeyh := wdata }
-    when (decoded_addr(CSRs.scrakeyl)) { reg_scrakeyl := wdata }
-    when (decoded_addr(CSRs.scrakeyh)) { reg_scrakeyh := wdata }
-    when (decoded_addr(CSRs.scrbkeyl)) { reg_scrbkeyl := wdata }
-    when (decoded_addr(CSRs.scrbkeyh)) { reg_scrbkeyh := wdata }
-    when (decoded_addr(CSRs.scrckeyl)) { reg_scrckeyl := wdata }
-    when (decoded_addr(CSRs.scrckeyh)) { reg_scrckeyh := wdata }
-    when (decoded_addr(CSRs.scrdkeyl)) { reg_scrdkeyl := wdata }
-    when (decoded_addr(CSRs.scrdkeyh)) { reg_scrdkeyh := wdata }
-    when (decoded_addr(CSRs.screkeyl)) { reg_screkeyl := wdata }
-    when (decoded_addr(CSRs.screkeyh)) { reg_screkeyh := wdata }
-    when (decoded_addr(CSRs.scrfkeyl)) { reg_scrfkeyl := wdata }
-    when (decoded_addr(CSRs.scrfkeyh)) { reg_scrfkeyh := wdata }
+    when (decoded_addr(CustomCSRs.mcrmkeyl)) { reg_mcrmkeyl := wdata }
+    when (decoded_addr(CustomCSRs.mcrmkeyh)) { reg_mcrmkeyh := wdata }
+    when (decoded_addr(CustomCSRs.scrtkeyl)) { reg_scrtkeyl := wdata }
+    when (decoded_addr(CustomCSRs.scrtkeyh)) { reg_scrtkeyh := wdata }
+    when (decoded_addr(CustomCSRs.scrakeyl)) { reg_scrakeyl := wdata }
+    when (decoded_addr(CustomCSRs.scrakeyh)) { reg_scrakeyh := wdata }
+    when (decoded_addr(CustomCSRs.scrbkeyl)) { reg_scrbkeyl := wdata }
+    when (decoded_addr(CustomCSRs.scrbkeyh)) { reg_scrbkeyh := wdata }
+    when (decoded_addr(CustomCSRs.scrckeyl)) { reg_scrckeyl := wdata }
+    when (decoded_addr(CustomCSRs.scrckeyh)) { reg_scrckeyh := wdata }
+    when (decoded_addr(CustomCSRs.scrdkeyl)) { reg_scrdkeyl := wdata }
+    when (decoded_addr(CustomCSRs.scrdkeyh)) { reg_scrdkeyh := wdata }
+    when (decoded_addr(CustomCSRs.screkeyl)) { reg_screkeyl := wdata }
+    when (decoded_addr(CustomCSRs.screkeyh)) { reg_screkeyh := wdata }
+    when (decoded_addr(CustomCSRs.scrfkeyl)) { reg_scrfkeyl := wdata }
+    when (decoded_addr(CustomCSRs.scrfkeyh)) { reg_scrfkeyh := wdata }
 
     if (usingHypervisor) {
       when (decoded_addr(CSRs.hstatus)) {

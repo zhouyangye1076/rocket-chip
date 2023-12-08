@@ -34,6 +34,7 @@ object CustomInstructions {
   def CUSTOM3_RD         = BitPat("b?????????????????100?????1111011")
   def CUSTOM3_RD_RS1     = BitPat("b?????????????????110?????1111011")
   def CUSTOM3_RD_RS1_RS2 = BitPat("b?????????????????111?????1111011")
+  def PECInst            = BitPat("b?????????????????????????1101011")
 }
 
 object CustomCSRs {
@@ -41,12 +42,47 @@ object CustomCSRs {
   val mnepc = 0x351
   val mncause = 0x352
   val mnstatus = 0x353
+
+  val mcrmkeyl = 0x7f0
+  val mcrmkeyh = 0x7f1
+  val scrtkeyl = 0x5f0
+  val scrtkeyh = 0x5f1
+  val scrakeyl = 0x5f2
+  val scrakeyh = 0x5f3
+  val scrbkeyl = 0x5f4
+  val scrbkeyh = 0x5f5
+  val scrckeyl = 0x5f6
+  val scrckeyh = 0x5f7
+  val scrdkeyl = 0x5f8
+  val scrdkeyh = 0x5f9
+  val screkeyl = 0x5fa
+  val screkeyh = 0x5fb
+  val scrfkeyl = 0x5fc
+  val scrfkeyh = 0x5fd
+
   val all = {
     val res = collection.mutable.ArrayBuffer[Int]()
     res += mnscratch
     res += mnepc
     res += mncause
     res += mnstatus
+
+    res += mcrmkeyl
+    res += mcrmkeyh
+    res += scrtkeyl
+    res += scrtkeyh
+    res += scrakeyl
+    res += scrakeyh
+    res += scrbkeyl
+    res += scrbkeyh
+    res += scrckeyl
+    res += scrckeyh
+    res += scrdkeyl
+    res += scrdkeyh
+    res += screkeyl
+    res += screkeyh
+    res += scrfkeyl
+    res += scrfkeyh
     res.toArray
   }
   val all32 = {
