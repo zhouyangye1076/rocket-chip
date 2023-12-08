@@ -335,6 +335,7 @@ trait QarmaParamsIO extends MultiIOModule with QarmaParams {
     })))
     val output = IO(Decoupled(new Bundle{
         val result = UInt(64.W)
+        val decrypt = Bool()
     }))
 }
 
@@ -409,6 +410,7 @@ class QarmaSingleCycle(max_round: Int = 7) extends QarmaParamsIO {
     }
 
     output.bits.result := is_vec(wire_index) ^ w1
+    output.bits.decrypt := ~input.bits.encrypt & input.valid
     output.valid := true.B
     input.ready := true.B
 }
@@ -443,6 +445,7 @@ class QarmaMultiCycle(max_round: Int = 7) extends QarmaParamsIO {
     val w1_regs = RegInit(VecInit(Seq.fill(4)(0.U((64).W))))
     val k0_regs = RegInit(VecInit(Seq.fill(4)(0.U((64).W))))
     val k1_regs = RegInit(VecInit(Seq.fill(4)(0.U((64).W))))
+    val decrpt_regs = RegInit(VecInit(Seq.fill(4)(false.B)))
 
     is_vec(wire_index) := is_regs(0)
     tk_vec(wire_index) := tk_regs(0)
@@ -518,6 +521,7 @@ class QarmaMultiCycle(max_round: Int = 7) extends QarmaParamsIO {
                 w1_regs(i) := w1
                 k0_regs(i) := k0
                 k1_regs(i) := k1
+                decrpt_regs(i) := input.valid & ~input.bits.encrypt
             }
         } else {
             when(!stall_table(i)){
@@ -529,11 +533,13 @@ class QarmaMultiCycle(max_round: Int = 7) extends QarmaParamsIO {
                 w1_regs(i) := w1_regs(i - 1)
                 k0_regs(i) := k0_regs(i - 1)
                 k1_regs(i) := k1_regs(i - 1)
+                decrpt_regs(i) := decrpt_regs(i - 1)
             }
         }
     }
 
     output.bits.result := is_regs(3) ^ w1_regs(3)
+    output.bits.decrpt_regs := decrpt_regs(3)
     output.valid := busy_table(3)
     input.ready := !stall_table(3)
 }
