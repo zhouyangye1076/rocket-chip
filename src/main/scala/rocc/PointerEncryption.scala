@@ -14,9 +14,9 @@ class KeySelect(val nRoCCCSRs: Int = 0)(implicit p: Parameters) extends Module{
     val keyh = Output(UInt(xLen.W))
   })
 
-  val keyval = Wire(Vec(16,UInt(xLen.W)))
+  val keyval = Wire(Vec(nRoCCCSRs,UInt(xLen.W)))
 
-  for(i <- 0 until 16){
+  for(i <- 0 until nRoCCCSRs){
     io.csrs(i).sdata := 0.U(xLen.W)
     io.csrs(i).set := false.B
     io.csrs(i).stall := false.B
@@ -84,7 +84,8 @@ class PointerEncryption(opcodes: OpcodeSet)(implicit p: Patermeters)
         CustomCSR.constant(0x5fc,0),
         CustomCSR.constant(0x5fd,0)
       )
-      override lazy val module = new PointerEncryptionMultiCycleImp(this)
+      val nRoCCCSRs = roccCSRs.size
+      override lazy val module = new PointerEncryptionSingleCycleImp(this)
 }
 
 class PointerEncryptionSingleCycleImp(outer: PointerEncryption)(implicit p: Parameters)
@@ -94,7 +95,7 @@ class PointerEncryptionSingleCycleImp(outer: PointerEncryption)(implicit p: Para
   val pec_engine = Module(new QarmaSingleCysle(7))
   val keyselect = Module(new KeySelect(outer.nRoCCCSRs))
   keyselect.io.csrs := io.csrs
-  keyselect.iokeyindex := Cat(io.cmd.bits.inst.xd, io.cmd.bits.inst.xs1, io.cmd.bits.inst.xs2)
+  keyselect.io.keyindex := Cat(io.cmd.bits.inst.xd, io.cmd.bits.inst.xs1, io.cmd.bits.inst.xs2)
   pec_engine.input.bits.keyh := keyselect.io.keyh
   pec_engine.input.bits.keyl := keyselect.io.keyl
 
