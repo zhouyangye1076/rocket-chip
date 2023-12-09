@@ -279,7 +279,7 @@ class DataBundle(max_round: Int, step_len: Int) extends Bundle with QarmaParams 
 }
 
 class ExecutionContext(max_round: Int = 7, depth: Int=0, port: Int = 0, step_len: Int)
-    extends MultiIOModule with QarmaParams {
+    extends Module with QarmaParams {
     
     if(port != 0 && port != 1 && port != 2){
         println("Variable read_port in ExecutionContext should be in [1, 2].")
@@ -298,54 +298,58 @@ class ExecutionContext(max_round: Int = 7, depth: Int=0, port: Int = 0, step_len
     val data_slot_width = new DataBundle(max_round, step_len).getWidth
     val meta_slot_width = new MetaBundle(max_round).getWidth
 
-    val input = IO(new Bundle {
-        val new_data = Input(Vec(slot_depth, new DataBundle(max_round, step_len)))
-        val new_meta = Input(Vec(slot_depth, new MetaBundle(max_round)))
-        val update = Input(Vec(slot_depth, Bool()))
-    })
-    val output = IO(new Bundle {
-        val old_data = Input(Vec(slot_depth, new DataBundle(max_round, step_len)))
-        val old_meta = Input(Vec(slot_depth, new MetaBundle(max_round)))
+    val io = IO(new Bundle{
+        val input =new Bundle {
+            val new_data = Input(Vec(slot_depth, new DataBundle(max_round, step_len)))
+            val new_meta = Input(Vec(slot_depth, new MetaBundle(max_round)))
+            val update = Input(Vec(slot_depth, Bool()))
+        }
+        val output = new Bundle {
+            val old_data = Input(Vec(slot_depth, new DataBundle(max_round, step_len)))
+            val old_meta = Input(Vec(slot_depth, new MetaBundle(max_round)))
+        }
     })
 
     val data = RegInit(VecInit(Seq.fill(slot_depth)(0.U(data_slot_width.W))))
     val meta = RegInit(VecInit(Seq.fill(slot_depth)(0.U(meta_slot_width.W))))
 
     for(i <- 0 until slot_depth){
-        when(input.update(i)){
-            meta(i) := input.new_meta(i).asUInt
-            data(i) := input.new_data(i).asUInt
+        when(io.input.update(i)){
+            meta(i) := io.input.new_meta(i).asUInt
+            data(i) := io.input.new_data(i).asUInt
         }
     }
 
     for(i <- 0 until slot_depth){
-        output.old_meta := meta(i).asTypeOf(new MetaBundle(max_round))
-        output.old_data := data(i).asTypeOf(new DataBundle(max_round,step_len))
+        io.output.old_meta := meta(i).asTypeOf(new MetaBundle(max_round))
+        io.output.old_data := data(i).asTypeOf(new DataBundle(max_round,step_len))
     }
 }
 
-trait QarmaParamsIO extends MultiIOModule with QarmaParams {
-    val input = IO(Flipped(Decoupled(new Bundle{
-        val encrypt = Bool()
-        val keyh = UInt(64.W)
-        val keyl = UInt(64.W)
-        val tweak = UInt(64.W)
-        val text = UInt(64.W)
-        val actual_round = UInt(3.W)
-    })))
-    val output = IO(Decoupled(new Bundle{
-        val result = UInt(64.W)
-        val decrypt = Bool()
-    }))
+trait QarmaParamsIO extends Module with QarmaParams {
+    val io = IO(new Bundle{
+        val input = Flipped(Decoupled(new Bundle{
+            val encrypt = Bool()
+            val keyh = UInt(64.W)
+            val keyl = UInt(64.W)
+            val tweak = UInt(64.W)
+            val text = UInt(64.W)
+            val actual_round = UInt(3.W)
+        }))
+        val output = Decoupled(new Bundle{
+            val result = UInt(64.W)
+            val decrypt = Bool()
+        })
+    })
 }
 
 class QarmaSingleCycle(max_round: Int = 7) extends QarmaParamsIO {
     val mix_column = Module(new MixColumnOperator)
-    mix_column.io.in := input.bits.keyl
-    val w0 = Mux(input.bits.encrypt, input.bits.keyh, o_operation(input.bits.keyh))
-    val k0 = Mux(input.bits.encrypt, input.bits.keyl, input.bits.keyl^alpha.asUInt)
-    val w1 = Mux(input.bits.encrypt, o_operation(input.bits.keyh), input.bits.keyh)
-    val k1 = Mux(input.bits.encrypt, input.bits.keyl, mix_column.io.out)
+    mix_column.io.in := io.input.bits.keyl
+    val w0 = Mux(io.input.bits.encrypt, io.input.bits.keyh, o_operation(io.input.bits.keyh))
+    val k0 = Mux(io.input.bits.encrypt, io.input.bits.keyl, io.input.bits.keyl^alpha.asUInt)
+    val w1 = Mux(io.input.bits.encrypt, o_operation(io.input.bits.keyh), io.input.bits.keyh)
+    val k1 = Mux(io.input.bits.encrypt, io.input.bits.keyl, mix_column.io.out)
 
     val is_vec = Wire(Vec(max_round * 2 + 4, UInt(64.W)))
     val tk_vec = Wire(Vec(max_round * 2 + 4, UInt(64.W)))
@@ -357,8 +361,8 @@ class QarmaSingleCycle(max_round: Int = 7) extends QarmaParamsIO {
     var wire_index = 0
     var module_index = 0
 
-    is_vec(wire_index) := input.bits.text ^ w0
-    tk_vec(wire_index) := input.bits.tweak
+    is_vec(wire_index) := io.input.bits.text ^ w0
+    tk_vec(wire_index) := io.input.bits.tweak
     log(0, is_vec(wire_index), tk_vec(wire_index))
     for(i <- 0 until max_round){
         forward_operator_vec(module_index).is := is_vec(wire_index)
@@ -366,8 +370,8 @@ class QarmaSingleCycle(max_round: Int = 7) extends QarmaParamsIO {
         forward_operator_vec(module_index).round_zero := i.asUInt === 0.U
         forward_tweak_update_operator_vec(module_index).old_tk := tk_vec(wire_index)
         wire_index = wire_index + 1
-        is_vec(wire_index) := Mux(i.asUInt < input.bits.actual_round, forward_operator_vec(module_index).out, is_vec(wire_index - 1))
-        tk_vec(wire_index) := Mux(i.asUInt < input.bits.actual_round, forward_tweak_update_operator_vec(module_index).new_tk, tk_vec(wire_index - 1))
+        is_vec(wire_index) := Mux(i.asUInt < io.input.bits.actual_round, forward_operator_vec(module_index).out, is_vec(wire_index - 1))
+        tk_vec(wire_index) := Mux(i.asUInt < io.input.bits.actual_round, forward_tweak_update_operator_vec(module_index).new_tk, tk_vec(wire_index - 1))
         module_index = module_index + 1
         log(wire_index, is_vec(wire_index), tk_vec(wire_index))
     }
@@ -399,29 +403,29 @@ class QarmaSingleCycle(max_round: Int = 7) extends QarmaParamsIO {
     for(j <- 0 until max_round){
         val i = max_round -j -1
         backward_tweak_update_operator_vec(module_index).old_tk := tk_vec(wire_index)
-        tk_vec(wire_index + 1) := Mux(i.asUInt < input.bits.actual_round, backward_tweak_update_operator_vec(module_index).new_tk, tk_vec(wire_index))
+        tk_vec(wire_index + 1) := Mux(i.asUInt < io.input.bits.actual_round, backward_tweak_update_operator_vec(module_index).new_tk, tk_vec(wire_index))
         backward_operator_vec(module_index).is := is_vec(wire_index)
         backward_operator_vec(module_index).tk := tk_vec(wire_index + 1) ^ k0 ^ alpha.asUInt ^ c(i.asUInt)
         backward_operator_vec(module_index).round_zero := i.asUInt === 0.U
-        is_vec(wire_index + 1) := Mux(i.asUInt < input.bits.actual_round, backward_operator_vec(module_index).out, is_vec(wire_index))
+        is_vec(wire_index + 1) := Mux(i.asUInt < io.input.bits.actual_round, backward_operator_vec(module_index).out, is_vec(wire_index))
         wire_index = wire_index + 1
         module_index = module_index + 1
         log(wire_index, is_vec(wire_index), tk_vec(wire_index))
     }
 
-    output.bits.result := is_vec(wire_index) ^ w1
-    output.bits.decrypt := ~input.bits.encrypt & input.valid
-    output.valid := true.B
-    input.ready := true.B
+    io.output.bits.result := is_vec(wire_index) ^ w1
+    io.output.bits.decrypt := ~io.input.bits.encrypt & io.input.valid
+    io.output.valid := true.B
+    io.input.ready := true.B
 }
 
 class QarmaMultiCycle(max_round: Int = 7) extends QarmaParamsIO {
     val mix_column = Module(new MixColumnOperator)
-    mix_column.io.in := input.bits.keyl
-    val w0 = Mux(input.bits.encrypt, input.bits.keyh, o_operation(input.bits.keyh))
-    val k0 = Mux(input.bits.encrypt, input.bits.keyl, input.bits.keyl^alpha.asUInt)
-    val w1 = Mux(input.bits.encrypt, o_operation(input.bits.keyh), input.bits.keyh)
-    val k1 = Mux(input.bits.encrypt, input.bits.keyl, mix_column.io.out)
+    mix_column.io.in := io.input.bits.keyl
+    val w0 = Mux(io.input.bits.encrypt, io.input.bits.keyh, o_operation(io.input.bits.keyh))
+    val k0 = Mux(io.input.bits.encrypt, io.input.bits.keyl, io.input.bits.keyl^alpha.asUInt)
+    val w1 = Mux(io.input.bits.encrypt, o_operation(io.input.bits.keyh), io.input.bits.keyh)
+    val k1 = Mux(io.input.bits.encrypt, io.input.bits.keyl, mix_column.io.out)
 
     val is_vec = Wire(Vec(max_round * 2 + 5, UInt(64.W)))
     val tk_vec = Wire(Vec(max_round * 2 + 5, UInt(64.W)))
@@ -507,21 +511,21 @@ class QarmaMultiCycle(max_round: Int = 7) extends QarmaParamsIO {
 
     for(i <- 0 until 4){
         if(i == 3){
-            stall_table(i) := Mux(busy_table(i), !output.ready, false.B)
+            stall_table(i) := Mux(busy_table(i), !io.output.ready, false.B)
         } else {
             stall_table(i) := Mux(busy_table(i), stall_table(i + 1), false.B)
         }
         if(i == 0){
             when(!stall_table(i)){
-                busy_table(i) := input.valid
-                round_table(i) := input.bits.actual_round
-                is_regs(i) := input.bits.text ^ w0
-                tk_regs(i) := input.bits.tweak
+                busy_table(i) := io.input.valid
+                round_table(i) := io.input.bits.actual_round
+                is_regs(i) := io.input.bits.text ^ w0
+                tk_regs(i) := io.input.bits.tweak
                 w0_regs(i) := w0
                 w1_regs(i) := w1
                 k0_regs(i) := k0
                 k1_regs(i) := k1
-                decrypt_regs(i) := input.valid & ~input.bits.encrypt
+                decrypt_regs(i) := io.input.valid & ~io.input.bits.encrypt
             }
         } else {
             when(!stall_table(i)){
@@ -538,10 +542,10 @@ class QarmaMultiCycle(max_round: Int = 7) extends QarmaParamsIO {
         }
     }
 
-    output.bits.result := is_regs(3) ^ w1_regs(3)
-    output.bits.decrypt := decrypt_regs(3)
-    output.valid := busy_table(3)
-    input.ready := !stall_table(3)
+    io.output.bits.result := is_regs(3) ^ w1_regs(3)
+    io.output.bits.decrypt := decrypt_regs(3)
+    io.output.valid := busy_table(3)
+    io.input.ready := !stall_table(3)
 }
 
 // object Driver extends App {
