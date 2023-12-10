@@ -7,23 +7,44 @@ import freechips.rocketchip.tile._
 import freechips.rocketchip.rocc.qaram._
 import freechips.rocketchip.diplomacy._
 
-class KeySelect(val nRoCCCSRs: Int = 0)(implicit p : Parameters) extends Module{
-  val io = IO(new Bundle{
-    val csrs = Flipped(Vec(nRoCCCSRs, new CustomCSRIO))
-    val keyindex = Input(UInt(3.W))
-    val keyl = Output(UInt(64.W))
-    val keyh = Output(UInt(64.W))
-  })
+class PointerEncryption(opcodes: OpcodeSet)(implicit p: Parameters)
+    extends LazyRoCC(opcodes)
+    with HasCoreParameters {
+      override val roccCSRs = Seq(
+        CustomCSR(0x7f0,BigInt(1),Some(BigInt(0))),
+        CustomCSR(0x7f1,BigInt(1),Some(BigInt(0))),
+        CustomCSR(0x5f0,BigInt(1),Some(BigInt(0))),
+        CustomCSR(0x5f1,BigInt(1),Some(BigInt(0))),
+        CustomCSR(0x5f2,BigInt(1),Some(BigInt(0))),
+        CustomCSR(0x5f3,BigInt(1),Some(BigInt(0))),
+        CustomCSR(0x5f4,BigInt(1),Some(BigInt(0))),
+        CustomCSR(0x5f5,BigInt(1),Some(BigInt(0))),
+        CustomCSR(0x5f6,BigInt(1),Some(BigInt(0))),
+        CustomCSR(0x5f7,BigInt(1),Some(BigInt(0))),
+        CustomCSR(0x5f8,BigInt(1),Some(BigInt(0))),
+        CustomCSR(0x5f9,BigInt(1),Some(BigInt(0))),
+        CustomCSR(0x5fa,BigInt(1),Some(BigInt(0))),
+        CustomCSR(0x5fb,BigInt(1),Some(BigInt(0))),
+        CustomCSR(0x5fc,BigInt(1),Some(BigInt(0))),
+        CustomCSR(0x5fd,BigInt(1),Some(BigInt(0)))
+      )
+      val nRoCCCSRs = roccCSRs.size
+      override lazy val module = new PointerEncryptionSingleCycleImp(this)
+}
 
-  val keyval = Wire(Vec(nRoCCCSRs,UInt(64.W)))
-
-  for(i <- 0 until nRoCCCSRs){
+class PointerEncryptionSingleCycleImp(outer: PointerEncryption)(implicit p: Parameters)
+  extends LazyRoCCModuleImp(outer)
+  with HasCoreParameters
+{
+  val pec_engine = Module(new QarmaSingleCycle(7))
+  
+  val keyval = Wire(Vec(outer.nRoCCCSRs,UInt(64.W)))
+  for(i <- 0 until outer.nRoCCCSRs){
     io.csrs(i).sdata := 0.U(64.W)
     io.csrs(i).set := false.B
     io.csrs(i).stall := false.B
     keyval(i) := Mux(io.csrs(i).wen, io.csrs(i).wdata, io.csrs(i).value)
   }
-  
   val csr_mcrmkeyl = keyval(0) 
   val csr_mcrmkeyh = keyval(1) 
   val csr_scrtkeyl = keyval(2) 
@@ -41,7 +62,9 @@ class KeySelect(val nRoCCCSRs: Int = 0)(implicit p : Parameters) extends Module{
   val csr_scrfkeyl = keyval(14) 
   val csr_scrfkeyh = keyval(15) 
   
-  io.keyh := MuxLookup(io.keyindex, csr_scrtkeyh, Seq(
+  val keyindex = Wire(UInt(3.W))
+  keyindex := Cat(io.cmd.bits.inst.xd, io.cmd.bits.inst.xs1, io.cmd.bits.inst.xs2)
+  pec_engine.io.input.bits.keyh := MuxLookup(keyindex, csr_scrtkeyh, Seq(
     "b000".U -> csr_scrtkeyh,
     "b001".U -> csr_mcrmkeyh,
     "b010".U -> csr_scrakeyh,   
@@ -52,7 +75,7 @@ class KeySelect(val nRoCCCSRs: Int = 0)(implicit p : Parameters) extends Module{
     "b111".U -> csr_scrfkeyh      
   ))
 
-  io.keyl := MuxLookup(io.keyindex, csr_scrtkeyl, Seq(
+  pec_engine.io.input.bits.keyl := MuxLookup(keyindex, csr_scrtkeyl, Seq(
     "b000".U -> csr_scrtkeyl,
     "b001".U -> csr_mcrmkeyl,
     "b010".U -> csr_scrakeyl,   
@@ -62,43 +85,6 @@ class KeySelect(val nRoCCCSRs: Int = 0)(implicit p : Parameters) extends Module{
     "b110".U -> csr_screkeyl,    
     "b111".U -> csr_scrfkeyl      
   ))
-}
-
-class PointerEncryption(opcodes: OpcodeSet)(implicit p: Parameters)
-    extends LazyRoCC(opcodes)
-    with HasCoreParameters {
-      override val roccCSRs = Seq(
-        CustomCSR.constant(0x7f0,0),
-        CustomCSR.constant(0x7f1,0),
-        CustomCSR.constant(0x5f0,0),
-        CustomCSR.constant(0x5f1,0),
-        CustomCSR.constant(0x5f2,0),
-        CustomCSR.constant(0x5f3,0),
-        CustomCSR.constant(0x5f4,0),
-        CustomCSR.constant(0x5f5,0),
-        CustomCSR.constant(0x5f6,0),
-        CustomCSR.constant(0x5f7,0),
-        CustomCSR.constant(0x5f8,0),
-        CustomCSR.constant(0x5f9,0),
-        CustomCSR.constant(0x5fa,0),
-        CustomCSR.constant(0x5fb,0),
-        CustomCSR.constant(0x5fc,0),
-        CustomCSR.constant(0x5fd,0)
-      )
-      val nRoCCCSRs = roccCSRs.size
-      override lazy val module = new PointerEncryptionSingleCycleImp(this)
-}
-
-class PointerEncryptionSingleCycleImp(outer: PointerEncryption)(implicit p: Parameters)
-  extends LazyRoCCModuleImp(outer)
-  with HasCoreParameters
-{
-  val pec_engine = Module(new QarmaSingleCycle(7))
-  val keyselect = Module(new KeySelect(outer.nRoCCCSRs))
-  keyselect.io.csrs := io.csrs
-  keyselect.io.keyindex := Cat(io.cmd.bits.inst.xd, io.cmd.bits.inst.xs1, io.cmd.bits.inst.xs2)
-  pec_engine.io.input.bits.keyh := keyselect.io.keyh
-  pec_engine.io.input.bits.keyl := keyselect.io.keyl
 
   val begin = Wire(UInt(3.W))
   val end = Wire(UInt(3.W))
@@ -132,7 +118,7 @@ class PointerEncryptionSingleCycleImp(outer: PointerEncryption)(implicit p: Para
   io.resp.valid := io.cmd.valid
 
   // Disable unused interfaces
-  io.interrupt      := except_examine
+  io.interrupt      := false.B
   io.mem.req.valid  := false.B
 }
 

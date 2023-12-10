@@ -587,43 +587,6 @@ class CSRFile(
     (io.counters zip reg_hpmevent) foreach { case (c, e) => c.eventSel := e }
   val reg_hpmcounter = io.counters.zipWithIndex.map { case (c, i) =>
     WideCounter(CSR.hpmWidth, c.inc, reset = false, inhibit = reg_mcountinhibit(CSR.firstHPM+i)) }
-
-  //the 128 bit master key {mcrmkeyh,mcrmkeyl}
-  //the 7 general key from a to g
-  val reg_mcrmkeyl = RegInit(0.U(xLen.W))
-  val reg_mcrmkeyh = RegInit(0.U(xLen.W))
-  val reg_scrtkeyl = RegInit(0.U(xLen.W))
-  val reg_scrtkeyh = RegInit(0.U(xLen.W))
-  val reg_scrakeyl = RegInit(0.U(xLen.W))
-  val reg_scrakeyh = RegInit(0.U(xLen.W))
-  val reg_scrbkeyl = RegInit(0.U(xLen.W))
-  val reg_scrbkeyh = RegInit(0.U(xLen.W))
-  val reg_scrckeyl = RegInit(0.U(xLen.W))
-  val reg_scrckeyh = RegInit(0.U(xLen.W))
-  val reg_scrdkeyl = RegInit(0.U(xLen.W))
-  val reg_scrdkeyh = RegInit(0.U(xLen.W))
-  val reg_screkeyl = RegInit(0.U(xLen.W))
-  val reg_screkeyh = RegInit(0.U(xLen.W))
-  val reg_scrfkeyl = RegInit(0.U(xLen.W))
-  val reg_scrfkeyh = RegInit(0.U(xLen.W))
-
-  // import chisel3.util.experimental.BoringUtils
-  // BoringUtils.addSource(reg_mcrmkeyl,"csr_mcrmkeyl")
-  // BoringUtils.addSource(reg_mcrmkeyh,"csr_mcrmkeyh")
-  // BoringUtils.addSource(reg_scrtkeyl,"csr_scrtkeyl")
-  // BoringUtils.addSource(reg_scrtkeyh,"csr_scrtkeyh")
-  // BoringUtils.addSource(reg_scrakeyl,"csr_scrakeyl")
-  // BoringUtils.addSource(reg_scrakeyh,"csr_scrakeyh")
-  // BoringUtils.addSource(reg_scrbkeyl,"csr_scrbkeyl")
-  // BoringUtils.addSource(reg_scrbkeyh,"csr_scrbkeyh")
-  // BoringUtils.addSource(reg_scrckeyl,"csr_scrckeyl")
-  // BoringUtils.addSource(reg_scrckeyh,"csr_scrckeyh")
-  // BoringUtils.addSource(reg_scrdkeyl,"csr_scrdkeyl")
-  // BoringUtils.addSource(reg_scrdkeyh,"csr_scrdkeyh")
-  // BoringUtils.addSource(reg_screkeyl,"csr_screkeyl")
-  // BoringUtils.addSource(reg_screkeyh,"csr_screkeyh")
-  // BoringUtils.addSource(reg_scrfkeyl,"csr_scrfkeyl")
-  // BoringUtils.addSource(reg_scrfkeyh,"csr_scrfkeyh")
   
   val mip = WireDefault(reg_mip)
   mip.lip := (io.interrupts.lip: Seq[Bool])
@@ -1514,7 +1477,7 @@ class CSRFile(
       }
     }
     def writeCustomCSR(io: CustomCSRIO, csr: CustomCSR, reg: UInt) = {
-      val mask = csr.mask.U(xLen.W)
+      val mask = Fill(64,1.U(1.W))//csr.mask.U(xLen.W)
       when (decoded_addr(csr.id)) {
         reg := (wdata & mask) | (reg & ~mask)
         io.wen := true.B
@@ -1539,7 +1502,7 @@ class CSRFile(
   }
 
   def setCustomCSR(io: CustomCSRIO, csr: CustomCSR, reg: UInt) = {
-    val mask = csr.mask.U(xLen.W)
+    val mask = Fill(64,1.U(1.W))//csr.mask.U(xLen.W)
     when (io.set) {
       reg := (io.sdata & mask) | (reg & ~mask)
     }
