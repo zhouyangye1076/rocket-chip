@@ -96,7 +96,7 @@ class PointerEncryptionSingleCycleImp(outer: PointerEncryption)(implicit p: Para
   val mask = Wire(Vec(8,UInt(8.W)))
   val mask_text = Wire(UInt(64.W))
   for(i <- 0 until 8){
-    mask(7 - i) := Fill(8, i.asUInt >= begin && i.asUInt <= end)
+    mask(i) := Fill(8, i.asUInt >= begin && i.asUInt <= end)
   }
   mask_text := mask.asTypeOf(UInt(64.W))
 
@@ -111,7 +111,7 @@ class PointerEncryptionSingleCycleImp(outer: PointerEncryption)(implicit p: Para
   io.resp.bits.data                   := pec_engine.io.output.bits.result
 
   val except_examine = Wire(Bool())
-  except_examine := Mux(pec_engine.io.output.bits.decrypt, (pec_engine.io.output.bits.result & ~mask_text) =/= 0.U(64.W), false.B)
+  except_examine := Mux(pec_engine.io.output.bits.decrypt, (pec_engine.io.output.bits.result & ~mask_text) =/= 0.U(64.W), false.B) | ~smallbefore
 
   io.cmd.ready  := io.resp.ready
   io.busy       := io.cmd.valid
@@ -189,7 +189,7 @@ class PointerEncryptionMultiCycleImp(outer: PointerEncryption)(implicit p: Param
   val mask_text = Wire(UInt(64.W))
   val text = Wire(UInt(64.W))
   for(i <- 0 until 8){
-    mask(7 - i) := Fill(8, i.asUInt >= begin && i.asUInt <= end)
+    mask(i) := Fill(8, i.asUInt >= begin && i.asUInt <= end)
   }
   mask_text := mask.asTypeOf(UInt(64.W))
   text := Mux(~io.cmd.bits.inst.funct(0), io.cmd.bits.rs1 & mask_text, io.cmd.bits.rs1)
@@ -245,7 +245,7 @@ class PointerEncryptionMultiCycleImp(outer: PointerEncryption)(implicit p: Param
   }
 
   val except_examine = Wire(Bool())
-  except_examine := Mux(reg_decrypt, (reg_result & ~reg_mask) =/= 0.U(64.W), false.B)
+  except_examine := Mux(reg_decrypt, (reg_result & ~reg_mask) =/= 0.U(64.W), false.B) | ~smallbefore
 
   io.resp.bits.rd   := reg_rd
   io.resp.bits.data := reg_result
