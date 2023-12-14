@@ -584,12 +584,12 @@ class QarmaCache(depth:Int = 8, policy:String = "Stack") extends Module {
     io.result := Mux(io.encrypt, cache(0).asTypeOf(new CacheData).chiper, cache(0).asTypeOf(new CacheData).plain)
     for(i <- 0 until depth){
         val data = cache(i).asTypeOf(new CacheData)
-        when(io.ren && io.tweak == data.tweak && io.sel == data.sel && data.valid.asBool){
-            when(io.encrypt && io.text == data.plain ){
+        when(io.ren && io.tweak === data.tweak && io.sel === data.sel && data.valid.asBool){
+            when(io.encrypt && io.text === data.plain ){
                 io.hit := true.B
                 io.result := data.chiper
                 wptr := wptr -1.U
-            }elsewhen(!io.encrypt && io.text == data.chiper){
+            }.elsewhen(!io.encrypt && io.text === data.chiper){
                 io.hit := true.B
                 io.result := data.plain
                 wptr := wptr - 1.U
@@ -601,7 +601,7 @@ class QarmaCache(depth:Int = 8, policy:String = "Stack") extends Module {
         for(i <- 0 until depth){
             val data = cache(i).asTypeOf(new CacheData)
             val new_data = WireInit(cache(i).asTypeOf(new CacheData))
-            when(io.sel == data.sel){
+            when(io.sel === data.sel){
                 new_data.valid := false.B
                 cache(i) := new_data.asUInt
             }

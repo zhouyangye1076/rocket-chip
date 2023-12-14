@@ -197,12 +197,14 @@ class PointerEncryptionMultiCycleImp(outer: PointerEncryption)(implicit p: Param
 
   val do_flush = Wire(Bool())
   val flush_sel = Wire(UInt(3.W))
-  do_flush := false.B
-  flush_sel := 0.U(3.W)
-  for(i <- 0 until nRoCCCSRs){
-    do_flush := do_flush | io.csr(i).wen
-    flush_sel := flush_sel | Fill(3, io.csr.wen) & (i>>1).asUInt
+  val wen_array = Wire(Vec(outer.nRoCCCSRs,Bool()))
+  val index_array = Wire(Vec(outer.nRoCCCSRs,UInt(3.W)))
+  for(i <- 0 until outer.nRoCCCSRs){
+    wen_array(i) := io.csrs(i).wen
+    index_array(i) := Fill(3, io.csrs(i).wen) & ((i>>1).asUInt)
   }
+  do_flush := wen_array.reduce((a,b)=>(a|b).asBool)
+  flush_sel := index_array.reduce((a,b)=>(a|b).asUInt)
 
   val reg_rd = RegInit(0.U(5.W))
   val reg_busy = RegInit(false.B)
@@ -217,19 +219,19 @@ class PointerEncryptionMultiCycleImp(outer: PointerEncryption)(implicit p: Param
   cache.io.update := pec_engine.io.output.valid
   cache.io.flush  := do_flush
   cache.io.ren    := io.cmd.fire()
-  cache.io.encrypt:= ~io.cmd.bits.funct(0)
+  cache.io.encrypt:= ~io.cmd.bits.inst.funct(0)
   cache.io.tweak  := Mux(pec_engine.io.output.valid, reg_tweak, io.cmd.bits.rs2)
   cache.io.text   := text
   cache.io.sel    := Mux(do_flush, flush_sel, Mux(io.cmd.fire(),keyindex, reg_keysel))
-  cache.io.chiper := Mux(reg_encrypt, pec_engine.io.output.bit.result, reg_text)
-  cache.io.plain  := Mux(reg_encrypt, reg_text, pec_engine.io.output.bit.result)
+  cache.io.chiper := Mux(reg_encrypt, pec_engine.io.output.bits.result, reg_text)
+  cache.io.plain  := Mux(reg_encrypt, reg_text, pec_engine.io.output.bits.result)
 
   pec_engine.io.input.bits.text          := text
   pec_engine.io.input.bits.tweak         := io.cmd.bits.rs2
   pec_engine.io.input.bits.keyl          := keyl
   pec_engine.io.input.bits.keyh          := keyh
   pec_engine.io.input.bits.actual_round  := 7.U
-  pec_engine.io.input.bits.encrypt       := ~io.cmd.bits.funct(0)
+  pec_engine.io.input.bits.encrypt       := ~io.cmd.bits.inst.funct(0)
   pec_engine.io.input.valid              := io.cmd.fire() && !cache.io.hit
   pec_engine.io.output.ready             := pec_engine.io.output.valid
 
@@ -257,13 +259,13 @@ class PointerEncryptionMultiCycleImp(outer: PointerEncryption)(implicit p: Param
   }
 
   val except_examine = Wire(Bool())
-  except_examine := Mux(~reg_encrypt&&pec_engine.output.valid, (reg_result & ~reg_mask) =/= 0.U(64.W), false.B) | ~smallbefore
+  except_examine := Mux(~reg_encrypt&&pec_engine.io.output.valid, (reg_result & ~reg_mask) =/= 0.U(64.W), false.B) | ~smallbefore
 
   io.resp.bits.rd   := Mux(io.cmd.fire() && cache.io.hit, io.cmd.bits.inst.rd, reg_rd)
-  io.resp.bits.data := Mux(io.cmd.fire() && cache.io.hit, cache.io.result, Mux(pec_engine.output.valid, pec_engine.io.output.bits.result, reg_result))
+  io.resp.bits.data := Mux(io.cmd.fire() && cache.io.hit, cache.io.result, Mux(pec_engine.io.output.valid, pec_engine.io.output.bits.result, reg_result))
   io.cmd.ready  := !reg_busy
   io.busy       := reg_busy && !pec_engine.io.output.valid
-  io.resp.valid := reg_resp || (io.cmd.fire() && cache.io.hit) || pec_engine.output.valid
+  io.resp.valid := reg_resp || (io.cmd.fire() && cache.io.hit) || pec_engine.io.output.valid
 
   // Disable unused interfaces
   io.interrupt      := false.B
