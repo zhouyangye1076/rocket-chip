@@ -22,8 +22,8 @@ class BaseConfig extends Config(
 
 class DefaultConfig extends Config(
   new WithPECRocc ++
-  new WithNBigCores(1) ++ 
-  new WithCoherentBusTopology ++ 
+  new WithNBigCores(1) ++
+  new WithCoherentBusTopology ++
   new BaseConfig
 )
 

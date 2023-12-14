@@ -37,7 +37,7 @@ class PointerEncryptionSingleCycleImp(outer: PointerEncryption)(implicit p: Para
   with HasCoreParameters
 {
   val pec_engine = Module(new QarmaSingleCycle(7))
-  
+
   val keyval = Wire(Vec(outer.nRoCCCSRs,UInt(64.W)))
   for(i <- 0 until outer.nRoCCCSRs){
     io.csrs(i).sdata := 0.U(64.W)
@@ -45,45 +45,45 @@ class PointerEncryptionSingleCycleImp(outer: PointerEncryption)(implicit p: Para
     io.csrs(i).stall := false.B
     keyval(i) := Mux(io.csrs(i).wen, io.csrs(i).wdata, io.csrs(i).value)
   }
-  val csr_mcrmkeyl = keyval(0) 
-  val csr_mcrmkeyh = keyval(1) 
-  val csr_scrtkeyl = keyval(2) 
-  val csr_scrtkeyh = keyval(3) 
-  val csr_scrakeyl = keyval(4) 
-  val csr_scrakeyh = keyval(5) 
-  val csr_scrbkeyl = keyval(6) 
-  val csr_scrbkeyh = keyval(7) 
-  val csr_scrckeyl = keyval(8) 
-  val csr_scrckeyh = keyval(9) 
-  val csr_scrdkeyl = keyval(10) 
-  val csr_scrdkeyh = keyval(11) 
-  val csr_screkeyl = keyval(12) 
-  val csr_screkeyh = keyval(13) 
-  val csr_scrfkeyl = keyval(14) 
-  val csr_scrfkeyh = keyval(15) 
-  
+  val csr_mcrmkeyl = keyval(0)
+  val csr_mcrmkeyh = keyval(1)
+  val csr_scrtkeyl = keyval(2)
+  val csr_scrtkeyh = keyval(3)
+  val csr_scrakeyl = keyval(4)
+  val csr_scrakeyh = keyval(5)
+  val csr_scrbkeyl = keyval(6)
+  val csr_scrbkeyh = keyval(7)
+  val csr_scrckeyl = keyval(8)
+  val csr_scrckeyh = keyval(9)
+  val csr_scrdkeyl = keyval(10)
+  val csr_scrdkeyh = keyval(11)
+  val csr_screkeyl = keyval(12)
+  val csr_screkeyh = keyval(13)
+  val csr_scrfkeyl = keyval(14)
+  val csr_scrfkeyh = keyval(15)
+
   val keyindex = Wire(UInt(3.W))
   keyindex := Cat(io.cmd.bits.inst.xd, io.cmd.bits.inst.xs1, io.cmd.bits.inst.xs2)
   pec_engine.io.input.bits.keyh := MuxLookup(keyindex, csr_scrtkeyh, Seq(
     "b000".U -> csr_scrtkeyh,
     "b001".U -> csr_mcrmkeyh,
-    "b010".U -> csr_scrakeyh,   
-    "b011".U -> csr_scrbkeyh,   
-    "b100".U -> csr_scrckeyh,    
-    "b101".U -> csr_scrdkeyh,      
-    "b110".U -> csr_screkeyh,    
-    "b111".U -> csr_scrfkeyh      
+    "b010".U -> csr_scrakeyh,
+    "b011".U -> csr_scrbkeyh,
+    "b100".U -> csr_scrckeyh,
+    "b101".U -> csr_scrdkeyh,
+    "b110".U -> csr_screkeyh,
+    "b111".U -> csr_scrfkeyh
   ))
 
   pec_engine.io.input.bits.keyl := MuxLookup(keyindex, csr_scrtkeyl, Seq(
     "b000".U -> csr_scrtkeyl,
     "b001".U -> csr_mcrmkeyl,
-    "b010".U -> csr_scrakeyl,   
-    "b011".U -> csr_scrbkeyl,   
-    "b100".U -> csr_scrckeyl,    
-    "b101".U -> csr_scrdkeyl,      
-    "b110".U -> csr_screkeyl,    
-    "b111".U -> csr_scrfkeyl      
+    "b010".U -> csr_scrakeyl,
+    "b011".U -> csr_scrbkeyl,
+    "b100".U -> csr_scrckeyl,
+    "b101".U -> csr_scrdkeyl,
+    "b110".U -> csr_screkeyl,
+    "b111".U -> csr_scrfkeyl
   ))
 
   val begin = Wire(UInt(3.W))
@@ -127,7 +127,7 @@ class PointerEncryptionMultiCycleImp(outer: PointerEncryption)(implicit p: Param
   with HasCoreParameters
 {
   val pec_engine = Module(new QarmaMultiCycle(7))
-  
+
   val keyval = Wire(Vec(outer.nRoCCCSRs,UInt(64.W)))
   for(i <- 0 until outer.nRoCCCSRs){
     io.csrs(i).sdata := 0.U(64.W)
@@ -135,47 +135,47 @@ class PointerEncryptionMultiCycleImp(outer: PointerEncryption)(implicit p: Param
     io.csrs(i).stall := false.B
     keyval(i) := Mux(io.csrs(i).wen, io.csrs(i).wdata, io.csrs(i).value)
   }
-  val csr_mcrmkeyl = keyval(0) 
-  val csr_mcrmkeyh = keyval(1) 
-  val csr_scrtkeyl = keyval(2) 
-  val csr_scrtkeyh = keyval(3) 
-  val csr_scrakeyl = keyval(4) 
-  val csr_scrakeyh = keyval(5) 
-  val csr_scrbkeyl = keyval(6) 
-  val csr_scrbkeyh = keyval(7) 
-  val csr_scrckeyl = keyval(8) 
-  val csr_scrckeyh = keyval(9) 
-  val csr_scrdkeyl = keyval(10) 
-  val csr_scrdkeyh = keyval(11) 
-  val csr_screkeyl = keyval(12) 
-  val csr_screkeyh = keyval(13) 
-  val csr_scrfkeyl = keyval(14) 
-  val csr_scrfkeyh = keyval(15) 
-  
+  val csr_mcrmkeyl = keyval(0)
+  val csr_mcrmkeyh = keyval(1)
+  val csr_scrtkeyl = keyval(2)
+  val csr_scrtkeyh = keyval(3)
+  val csr_scrakeyl = keyval(4)
+  val csr_scrakeyh = keyval(5)
+  val csr_scrbkeyl = keyval(6)
+  val csr_scrbkeyh = keyval(7)
+  val csr_scrckeyl = keyval(8)
+  val csr_scrckeyh = keyval(9)
+  val csr_scrdkeyl = keyval(10)
+  val csr_scrdkeyh = keyval(11)
+  val csr_screkeyl = keyval(12)
+  val csr_screkeyh = keyval(13)
+  val csr_scrfkeyl = keyval(14)
+  val csr_scrfkeyh = keyval(15)
+
   val keyindex = Wire(UInt(3.W))
   val keyh = Wire(UInt(64.W))
   keyindex := Cat(io.cmd.bits.inst.xd, io.cmd.bits.inst.xs1, io.cmd.bits.inst.xs2)
   keyh := MuxLookup(keyindex, csr_scrtkeyh, Seq(
     "b000".U -> csr_scrtkeyh,
     "b001".U -> csr_mcrmkeyh,
-    "b010".U -> csr_scrakeyh,   
-    "b011".U -> csr_scrbkeyh,   
-    "b100".U -> csr_scrckeyh,    
-    "b101".U -> csr_scrdkeyh,      
-    "b110".U -> csr_screkeyh,    
-    "b111".U -> csr_scrfkeyh      
+    "b010".U -> csr_scrakeyh,
+    "b011".U -> csr_scrbkeyh,
+    "b100".U -> csr_scrckeyh,
+    "b101".U -> csr_scrdkeyh,
+    "b110".U -> csr_screkeyh,
+    "b111".U -> csr_scrfkeyh
   ))
 
   val keyl = Wire(UInt(64.W))
   keyl := MuxLookup(keyindex, csr_scrtkeyl, Seq(
     "b000".U -> csr_scrtkeyl,
     "b001".U -> csr_mcrmkeyl,
-    "b010".U -> csr_scrakeyl,   
-    "b011".U -> csr_scrbkeyl,   
-    "b100".U -> csr_scrckeyl,    
-    "b101".U -> csr_scrdkeyl,      
-    "b110".U -> csr_screkeyl,    
-    "b111".U -> csr_scrfkeyl      
+    "b010".U -> csr_scrakeyl,
+    "b011".U -> csr_scrbkeyl,
+    "b100".U -> csr_scrckeyl,
+    "b101".U -> csr_scrdkeyl,
+    "b110".U -> csr_screkeyl,
+    "b111".U -> csr_scrfkeyl
   ))
 
   val begin = Wire(UInt(3.W))
@@ -257,5 +257,3 @@ class PointerEncryptionMultiCycleImp(outer: PointerEncryption)(implicit p: Param
   io.interrupt      := false.B
   io.mem.req.valid  := false.B
 }
-
-

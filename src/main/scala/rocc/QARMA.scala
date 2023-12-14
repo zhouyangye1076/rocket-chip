@@ -78,10 +78,10 @@ class MixColumnOperatorIO extends Bundle {
 
 class MixColumnOperator extends Module with QarmaParams {
     val io = IO(new MixColumnOperatorIO)
-    
+
     val perm = Wire(Vec(16,UInt(4.W)))
     perm := io.in.asTypeOf(Vec(16,UInt(4.W)))
-    
+
     val tmp_vec = Wire(Vec(16,Vec(4,UInt(4.W))))
     val res_vec = Wire(Vec(16,UInt(4.W)))
 
@@ -143,7 +143,7 @@ class BackwardTweakUpdateOperator extends Module with QarmaParams {
             tmp_vec(15 - i) := cell(15 - i)
         }
     }
-    
+
     for(i <- 0 until 16){
         res_vec(15 - i) := tmp_vec(15 - h_inv(i))
     }
@@ -280,7 +280,7 @@ class DataBundle(max_round: Int, step_len: Int) extends Bundle with QarmaParams 
 
 class ExecutionContext(max_round: Int = 7, depth: Int=0, port: Int = 0, step_len: Int)
     extends Module with QarmaParams {
-    
+
     if(port != 0 && port != 1 && port != 2){
         println("Variable read_port in ExecutionContext should be in [1, 2].")
         sys.exit(-1)
