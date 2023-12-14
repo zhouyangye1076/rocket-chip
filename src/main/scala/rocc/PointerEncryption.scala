@@ -11,10 +11,10 @@ class PointerEncryption(opcodes: OpcodeSet)(implicit p: Parameters)
     extends LazyRoCC(opcodes)
     with HasCoreParameters {
       override val roccCSRs = Seq(
-        CustomCSR(0x7f0,BigInt(1),Some(BigInt(0))),
-        CustomCSR(0x7f1,BigInt(1),Some(BigInt(0))),
         CustomCSR(0x5f0,BigInt(1),Some(BigInt(0))),
         CustomCSR(0x5f1,BigInt(1),Some(BigInt(0))),
+        CustomCSR(0x7f0,BigInt(1),Some(BigInt(0))),
+        CustomCSR(0x7f1,BigInt(1),Some(BigInt(0))),
         CustomCSR(0x5f2,BigInt(1),Some(BigInt(0))),
         CustomCSR(0x5f3,BigInt(1),Some(BigInt(0))),
         CustomCSR(0x5f4,BigInt(1),Some(BigInt(0))),
@@ -45,10 +45,10 @@ class PointerEncryptionSingleCycleImp(outer: PointerEncryption)(implicit p: Para
     io.csrs(i).stall := false.B
     keyval(i) := Mux(io.csrs(i).wen, io.csrs(i).wdata, io.csrs(i).value)
   }
-  val csr_mcrmkeyl = keyval(0)
-  val csr_mcrmkeyh = keyval(1)
-  val csr_scrtkeyl = keyval(2)
-  val csr_scrtkeyh = keyval(3)
+  val csr_scrtkeyl = keyval(0)
+  val csr_scrtkeyh = keyval(1)
+  val csr_mcrmkeyl = keyval(2)
+  val csr_mcrmkeyh = keyval(3)
   val csr_scrakeyl = keyval(4)
   val csr_scrakeyh = keyval(5)
   val csr_scrbkeyl = keyval(6)
@@ -127,6 +127,7 @@ class PointerEncryptionMultiCycleImp(outer: PointerEncryption)(implicit p: Param
   with HasCoreParameters
 {
   val pec_engine = Module(new QarmaMultiCycle(7))
+  val cache = Module(new QarmaCache(16,"Stack"))
 
   val keyval = Wire(Vec(outer.nRoCCCSRs,UInt(64.W)))
   for(i <- 0 until outer.nRoCCCSRs){
@@ -135,10 +136,10 @@ class PointerEncryptionMultiCycleImp(outer: PointerEncryption)(implicit p: Param
     io.csrs(i).stall := false.B
     keyval(i) := Mux(io.csrs(i).wen, io.csrs(i).wdata, io.csrs(i).value)
   }
-  val csr_mcrmkeyl = keyval(0)
-  val csr_mcrmkeyh = keyval(1)
-  val csr_scrtkeyl = keyval(2)
-  val csr_scrtkeyh = keyval(3)
+  val csr_scrtkeyl = keyval(0)
+  val csr_scrtkeyh = keyval(1)
+  val csr_mcrmkeyl = keyval(2)
+  val csr_mcrmkeyh = keyval(3)
   val csr_scrakeyl = keyval(4)
   val csr_scrakeyh = keyval(5)
   val csr_scrbkeyl = keyval(6)
@@ -194,64 +195,75 @@ class PointerEncryptionMultiCycleImp(outer: PointerEncryption)(implicit p: Param
   mask_text := mask.asTypeOf(UInt(64.W))
   text := Mux(~io.cmd.bits.inst.funct(0), io.cmd.bits.rs1 & mask_text, io.cmd.bits.rs1)
 
+  val do_flush = Wire(Bool())
+  val flush_sel = Wire(UInt(3.W))
+  do_flush := false.B
+  flush_sel := 0.U(3.W)
+  for(i <- 0 until nRoCCCSRs){
+    do_flush := do_flush | io.csr(i).wen
+    flush_sel := flush_sel | Fill(3, io.csr.wen) & (i>>1).asUInt
+  }
+
   val reg_rd = RegInit(0.U(5.W))
   val reg_busy = RegInit(false.B)
   val reg_resp = RegInit(false.B)
   val reg_result = RegInit(0.U(xLen.W))
-  val reg_decrypt = RegInit(false.B)
   val reg_text  = RegInit(0.U(xLen.W))
   val reg_tweak = RegInit(0.U(xLen.W))
   val reg_mask = RegInit(0.U(xLen.W))
-  val reg_keyh = RegInit(0.U(xLen.W))
-  val reg_keyl = RegInit(0.U(xLen.W))
+  val reg_keysel = RegInit(0.U(3.W))
   val reg_encrypt = RegInit(false.B)
-  val reg_valid = RegInit(false.B)
 
-  pec_engine.io.input.bits.text          := reg_text
-  pec_engine.io.input.bits.tweak         := reg_tweak
-  pec_engine.io.input.bits.keyl          := reg_keyl
-  pec_engine.io.input.bits.keyh          := reg_keyh
-  pec_engine.io.input.bits.actual_round  := 7.U(3.W)
-  pec_engine.io.input.bits.encrypt       := reg_encrypt
-  pec_engine.io.input.valid              := reg_valid
+  cache.io.update := pec_engine.io.output.valid
+  cache.io.flush  := do_flush
+  cache.io.ren    := io.cmd.fire()
+  cache.io.encrypt:= ~io.cmd.bits.funct(0)
+  cache.io.tweak  := Mux(pec_engine.io.output.valid, reg_tweak, io.cmd.bits.rs2)
+  cache.io.text   := text
+  cache.io.sel    := Mux(do_flush, flush_sel, Mux(io.cmd.fire(),keyindex, reg_keysel))
+  cache.io.chiper := Mux(reg_encrypt, pec_engine.io.output.bit.result, reg_text)
+  cache.io.plain  := Mux(reg_encrypt, reg_text, pec_engine.io.output.bit.result)
+
+  pec_engine.io.input.bits.text          := text
+  pec_engine.io.input.bits.tweak         := io.cmd.bits.rs2
+  pec_engine.io.input.bits.keyl          := keyl
+  pec_engine.io.input.bits.keyh          := keyh
+  pec_engine.io.input.bits.actual_round  := 7.U
+  pec_engine.io.input.bits.encrypt       := ~io.cmd.bits.funct(0)
+  pec_engine.io.input.valid              := io.cmd.fire() && !cache.io.hit
   pec_engine.io.output.ready             := pec_engine.io.output.valid
 
   when(io.cmd.fire()){
-    reg_valid := true.B
-    reg_busy := true.B
+    reg_busy := ~cache.io.hit
     reg_rd := io.cmd.bits.inst.rd
-    reg_keyh := keyh
-    reg_keyl := keyl
+    reg_keysel := keyindex
     reg_text := text
     reg_mask := mask_text
     reg_tweak := io.cmd.bits.rs2
     reg_encrypt := ~io.cmd.bits.inst.funct(0)
   }
 
-  when(pec_engine.io.output.valid){
+  when(io.cmd.fire() && cache.io.hit){
+    reg_result := cache.io.result
+    reg_resp := true.B
+  }.elsewhen(pec_engine.io.output.valid){
     reg_result := pec_engine.io.output.bits.result
     reg_resp := true.B
-    reg_decrypt := pec_engine.io.output.bits.decrypt
   }
 
   when(io.resp.fire()){
-    reg_valid := false.B
     reg_busy := false.B
     reg_resp := false.B
   }
 
-  when(reg_valid){
-    reg_valid := false.B
-  }
-
   val except_examine = Wire(Bool())
-  except_examine := Mux(reg_decrypt, (reg_result & ~reg_mask) =/= 0.U(64.W), false.B) | ~smallbefore
+  except_examine := Mux(~reg_encrypt&&pec_engine.output.valid, (reg_result & ~reg_mask) =/= 0.U(64.W), false.B) | ~smallbefore
 
-  io.resp.bits.rd   := reg_rd
-  io.resp.bits.data := reg_result
+  io.resp.bits.rd   := Mux(io.cmd.fire() && cache.io.hit, io.cmd.bits.inst.rd, reg_rd)
+  io.resp.bits.data := Mux(io.cmd.fire() && cache.io.hit, cache.io.result, Mux(pec_engine.output.valid, pec_engine.io.output.bits.result, reg_result))
   io.cmd.ready  := !reg_busy
-  io.busy       := reg_busy
-  io.resp.valid := reg_resp
+  io.busy       := reg_busy && !pec_engine.io.output.valid
+  io.resp.valid := reg_resp || (io.cmd.fire() && cache.io.hit) || pec_engine.output.valid
 
   // Disable unused interfaces
   io.interrupt      := false.B
