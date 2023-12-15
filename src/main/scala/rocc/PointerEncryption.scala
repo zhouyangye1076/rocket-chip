@@ -43,7 +43,7 @@ class PointerEncryptionSingleCycleImp(outer: PointerEncryption)(implicit p: Para
     io.csrs(i).sdata := 0.U(64.W)
     io.csrs(i).set := false.B
     io.csrs(i).stall := false.B
-    keyval(i) := Mux(io.csrs(i).wen, io.csrs(i).wdata, io.csrs(i).value)
+    keyval(i) := io.csrs(i).value
   }
   val csr_scrtkeyl = keyval(0)
   val csr_scrtkeyh = keyval(1)
@@ -131,10 +131,7 @@ class PointerEncryptionMultiCycleImp(outer: PointerEncryption)(implicit p: Param
 
   val keyval = Wire(Vec(outer.nRoCCCSRs,UInt(64.W)))
   for(i <- 0 until outer.nRoCCCSRs){
-    io.csrs(i).sdata := 0.U(64.W)
-    io.csrs(i).set := false.B
-    io.csrs(i).stall := false.B
-    keyval(i) := Mux(io.csrs(i).wen, io.csrs(i).wdata, io.csrs(i).value)
+    keyval(i) := io.csrs(i).value
   }
   val csr_scrtkeyl = keyval(0)
   val csr_scrtkeyh = keyval(1)
@@ -215,6 +212,12 @@ class PointerEncryptionMultiCycleImp(outer: PointerEncryption)(implicit p: Param
   val reg_mask = RegInit(0.U(xLen.W))
   val reg_keysel = RegInit(0.U(3.W))
   val reg_encrypt = RegInit(false.B)
+
+  for(i <- 0 until outer.nRoCCCSRs){
+    io.csrs(i).sdata := 0.U(64.W)
+    io.csrs(i).set := false.B
+    io.csrs(i).stall := reg_busy
+  }
 
   cache.io.update := pec_engine.io.output.valid
   cache.io.flush  := do_flush
