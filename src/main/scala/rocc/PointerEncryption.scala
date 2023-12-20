@@ -127,7 +127,7 @@ class PointerEncryptionMultiCycleImp(outer: PointerEncryption)(implicit p: Param
   with HasCoreParameters
 {
   val pec_engine = Module(new QarmaMultiCycle(7))
-  val cache = Module(new QarmaCache(16,"Stack"))
+  val cache = Module(new QarmaCache(8,"Stack"))
 
   val keyval = Wire(Vec(outer.nRoCCCSRs,UInt(64.W)))
   for(i <- 0 until outer.nRoCCCSRs){
