@@ -126,7 +126,7 @@ class PointerEncryptionMultiCycleImp(outer: PointerEncryption)(implicit p: Param
   extends LazyRoCCModuleImp(outer)
   with HasCoreParameters
 {
-  val pec_engine = Module(new QarmaMultiCycle(7))
+  val pec_engine = Module(new QarmaMultiCycle(7,4))
   val cache = Module(new QarmaCache(8,"Stack"))
 
   val keyval = Wire(Vec(outer.nRoCCCSRs,UInt(64.W)))

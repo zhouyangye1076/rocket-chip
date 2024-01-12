@@ -419,7 +419,7 @@ class QarmaSingleCycle(max_round: Int = 7) extends QarmaParamsIO {
     io.input.ready := true.B
 }
 
-class QarmaMultiCycle(max_round: Int = 7) extends QarmaParamsIO {
+class QarmaMultiCycle(max_round: Int = 7, stage_round: Int = 3) extends QarmaParamsIO {
     val mix_column = Module(new MixColumnOperator)
     mix_column.io.in := io.input.bits.keyl
     val w0 = Mux(io.input.bits.encrypt, io.input.bits.keyh, o_operation(io.input.bits.keyh))
@@ -427,8 +427,17 @@ class QarmaMultiCycle(max_round: Int = 7) extends QarmaParamsIO {
     val w1 = Mux(io.input.bits.encrypt, o_operation(io.input.bits.keyh), io.input.bits.keyh)
     val k1 = Mux(io.input.bits.encrypt, io.input.bits.keyl, mix_column.io.out)
 
-    val is_vec = Wire(Vec(max_round * 2 + 7, UInt(64.W)))
-    val tk_vec = Wire(Vec(max_round * 2 + 7, UInt(64.W)))
+    var round_stage_num = (max_round + stage_round - 1) / stage_round
+    var round_stage_index = new Array[Int](round_stage_num+1)
+    round_stage_index(0) = 0
+    for(i <- 1 until round_stage_num){
+        round_stage_index(i) = round_stage_index(i-1) + stage_round
+    }
+    round_stage_index(round_stage_num) = max_round
+    var stage_num = round_stage_num * 2 + 2
+
+    val is_vec = Wire(Vec(max_round * 2 + 3 + round_stage_num * 2, UInt(64.W)))
+    val tk_vec = Wire(Vec(max_round * 2 + 3 + round_stage_num * 2, UInt(64.W)))
     val forward_operator_vec = Array.fill(max_round + 1)(Module(new ForwardOperator).io)
     val forward_tweak_update_operator_vec = Array.fill(max_round)(Module(new ForwardTweakUpdateOperator).io)
     val reflector = Module(new PseudoReflectOperator).io
@@ -438,59 +447,45 @@ class QarmaMultiCycle(max_round: Int = 7) extends QarmaParamsIO {
     var module_index = 0
     var stage_index = 0
 
-    var temp_index = new Array[Int](5)
-    val stall_table = Wire(Vec(6, Bool()))
+    var temp_index = new Array[Int](stage_num-1)
+    val stall_table = Wire(Vec(stage_num, Bool()))
     //internal register
     //5-stage pipeline: load-forward-reflect-backward-out
-    val busy_table = RegInit(VecInit(Seq.fill(6)(false.B)))
-    val round_table = RegInit(VecInit(Seq.fill(6)(0.U(3.W))))
-    val is_regs = RegInit(VecInit(Seq.fill(6)(0.U((64).W))))
-    val tk_regs = RegInit(VecInit(Seq.fill(6)(0.U((64).W))))
-    val w0_regs = RegInit(VecInit(Seq.fill(6)(0.U((64).W))))
-    val w1_regs = RegInit(VecInit(Seq.fill(6)(0.U((64).W))))
-    val k0_regs = RegInit(VecInit(Seq.fill(6)(0.U((64).W))))
-    val k1_regs = RegInit(VecInit(Seq.fill(6)(0.U((64).W))))
-    val decrypt_regs = RegInit(VecInit(Seq.fill(6)(false.B)))
+    val busy_table = RegInit(VecInit(Seq.fill(stage_num)(false.B)))
+    val round_table = RegInit(VecInit(Seq.fill(stage_num)(0.U(3.W))))
+    val is_regs = RegInit(VecInit(Seq.fill(stage_num)(0.U((64).W))))
+    val tk_regs = RegInit(VecInit(Seq.fill(stage_num)(0.U((64).W))))
+    val w0_regs = RegInit(VecInit(Seq.fill(stage_num)(0.U((64).W))))
+    val w1_regs = RegInit(VecInit(Seq.fill(stage_num)(0.U((64).W))))
+    val k0_regs = RegInit(VecInit(Seq.fill(stage_num)(0.U((64).W))))
+    val k1_regs = RegInit(VecInit(Seq.fill(stage_num)(0.U((64).W))))
+    val decrypt_regs = RegInit(VecInit(Seq.fill(stage_num)(false.B)))
 
-    is_vec(wire_index) := is_regs(stage_index)
-    tk_vec(wire_index) := tk_regs(stage_index)
-    log(0, is_vec(wire_index), tk_vec(wire_index))
-    for(i <- 0 until 3){
-        forward_operator_vec(module_index).is := is_vec(wire_index)
-        forward_operator_vec(module_index).tk := tk_vec(wire_index) ^ k0_regs(stage_index) ^ c(i.asUInt)
-        forward_operator_vec(module_index).round_zero := i.asUInt === 0.U
-        forward_tweak_update_operator_vec(module_index).old_tk := tk_vec(wire_index)
-        wire_index = wire_index + 1
-        is_vec(wire_index) := Mux(i.asUInt < round_table(stage_index), forward_operator_vec(module_index).out, is_vec(wire_index - 1))
-        tk_vec(wire_index) := Mux(i.asUInt < round_table(stage_index), forward_tweak_update_operator_vec(module_index).new_tk, tk_vec(wire_index - 1))
-        module_index = module_index + 1
+    for(s <- 0 until round_stage_num){
+        is_vec(wire_index) := is_regs(stage_index)
+        tk_vec(wire_index) := tk_regs(stage_index)
         log(wire_index, is_vec(wire_index), tk_vec(wire_index))
-    }
-    temp_index(stage_index) = wire_index
-    stage_index = stage_index + 1
-
-    wire_index = wire_index + 1
-    is_vec(wire_index) := is_regs(stage_index)
-    tk_vec(wire_index) := tk_regs(stage_index)
-    log(wire_index, is_vec(wire_index), tk_vec(wire_index))
-    for(i <- 3 until max_round){
-        forward_operator_vec(module_index).is := is_vec(wire_index)
-        forward_operator_vec(module_index).tk := tk_vec(wire_index) ^ k0_regs(stage_index) ^ c(i.asUInt)
-        forward_operator_vec(module_index).round_zero := i.asUInt === 0.U
-        forward_tweak_update_operator_vec(module_index).old_tk := tk_vec(wire_index)
+        for(i <- round_stage_index(s) until round_stage_index(s + 1)){
+            forward_operator_vec(module_index).is := is_vec(wire_index)
+            forward_operator_vec(module_index).tk := tk_vec(wire_index) ^ k0_regs(stage_index) ^ c(i.asUInt)
+            forward_operator_vec(module_index).round_zero := i.asUInt === 0.U
+            forward_tweak_update_operator_vec(module_index).old_tk := tk_vec(wire_index)
+            wire_index = wire_index + 1
+            // is_vec(wire_index) := Mux(i.asUInt < round_table(stage_index), forward_operator_vec(module_index).out, is_vec(wire_index - 1))
+            // tk_vec(wire_index) := Mux(i.asUInt < round_table(stage_index), forward_tweak_update_operator_vec(module_index).new_tk, tk_vec(wire_index - 1))
+            is_vec(wire_index) := forward_operator_vec(module_index).out
+            tk_vec(wire_index) := forward_tweak_update_operator_vec(module_index).new_tk
+            module_index = module_index + 1
+            log(wire_index, is_vec(wire_index), tk_vec(wire_index))
+        }
+        temp_index(stage_index) = wire_index
+        stage_index = stage_index + 1
         wire_index = wire_index + 1
-        is_vec(wire_index) := Mux(i.asUInt < round_table(stage_index), forward_operator_vec(module_index).out, is_vec(wire_index - 1))
-        tk_vec(wire_index) := Mux(i.asUInt < round_table(stage_index), forward_tweak_update_operator_vec(module_index).new_tk, tk_vec(wire_index - 1))
-        module_index = module_index + 1
-        log(wire_index, is_vec(wire_index), tk_vec(wire_index))
     }
-    temp_index(stage_index) = wire_index
-    stage_index = stage_index + 1
 
     forward_operator_vec(module_index).is := is_regs(stage_index)
     forward_operator_vec(module_index).tk := tk_regs(stage_index) ^ w1_regs(stage_index)
     forward_operator_vec(module_index).round_zero := false.B
-    wire_index = wire_index + 1
     is_vec(wire_index) := forward_operator_vec(module_index).out
     tk_vec(wire_index) := tk_regs(stage_index)
     log(wire_index, is_vec(wire_index), tk_vec(wire_index))
@@ -512,45 +507,32 @@ class QarmaMultiCycle(max_round: Int = 7) extends QarmaParamsIO {
     module_index = 0
     temp_index(stage_index) = wire_index
     stage_index = stage_index + 1
-
     wire_index = wire_index + 1
-    is_vec(wire_index) := is_regs(stage_index)
-    tk_vec(wire_index) := tk_regs(stage_index)
-    for(j <- 0 until 3){
-        val i = max_round -j -1
-        backward_tweak_update_operator_vec(module_index).old_tk := tk_vec(wire_index)
-        tk_vec(wire_index + 1) := Mux(i.asUInt < round_table(stage_index), backward_tweak_update_operator_vec(module_index).new_tk, tk_vec(wire_index))
-        backward_operator_vec(module_index).is := is_vec(wire_index)
-        backward_operator_vec(module_index).tk := tk_vec(wire_index + 1) ^ k0_regs(stage_index) ^ alpha.asUInt ^ c(i.asUInt)
-        backward_operator_vec(module_index).round_zero := i.asUInt === 0.U
-        is_vec(wire_index + 1) := Mux(i.asUInt < round_table(stage_index), backward_operator_vec(module_index).out, is_vec(wire_index))
-        wire_index = wire_index + 1
-        module_index = module_index + 1
-        log(wire_index, is_vec(wire_index), tk_vec(wire_index))
-    }
-    temp_index(stage_index) = wire_index
-    stage_index = stage_index + 1
 
-    wire_index = wire_index + 1
-    is_vec(wire_index) := is_regs(stage_index)
-    tk_vec(wire_index) := tk_regs(stage_index)
-    for(j <- 3 until max_round){
-        val i = max_round -j -1
-        backward_tweak_update_operator_vec(module_index).old_tk := tk_vec(wire_index)
-        tk_vec(wire_index + 1) := Mux(i.asUInt < round_table(stage_index), backward_tweak_update_operator_vec(module_index).new_tk, tk_vec(wire_index))
-        backward_operator_vec(module_index).is := is_vec(wire_index)
-        backward_operator_vec(module_index).tk := tk_vec(wire_index + 1) ^ k0_regs(stage_index) ^ alpha.asUInt ^ c(i.asUInt)
-        backward_operator_vec(module_index).round_zero := i.asUInt === 0.U
-        is_vec(wire_index + 1) := Mux(i.asUInt < round_table(stage_index), backward_operator_vec(module_index).out, is_vec(wire_index))
+    for(s <- 0 until round_stage_num){
+        is_vec(wire_index) := is_regs(stage_index)
+        tk_vec(wire_index) := tk_regs(stage_index)
+        for(j <- round_stage_index(s) until round_stage_index(s+1)){
+            val i = max_round -j -1
+            backward_tweak_update_operator_vec(module_index).old_tk := tk_vec(wire_index)
+            // tk_vec(wire_index + 1) := Mux(i.asUInt < round_table(stage_index), backward_tweak_update_operator_vec(module_index).new_tk, tk_vec(wire_index))
+            tk_vec(wire_index + 1) := backward_tweak_update_operator_vec(module_index).new_tk
+            backward_operator_vec(module_index).is := is_vec(wire_index)
+            backward_operator_vec(module_index).tk := tk_vec(wire_index + 1) ^ k0_regs(stage_index) ^ alpha.asUInt ^ c(i.asUInt)
+            backward_operator_vec(module_index).round_zero := i.asUInt === 0.U
+            // is_vec(wire_index + 1) := Mux(i.asUInt < round_table(stage_index), backward_operator_vec(module_index).out, is_vec(wire_index))
+            is_vec(wire_index + 1) := backward_operator_vec(module_index).out
+            wire_index = wire_index + 1
+            module_index = module_index + 1
+            log(wire_index, is_vec(wire_index), tk_vec(wire_index))
+        }
+        temp_index(stage_index) = wire_index
+        stage_index = stage_index + 1
         wire_index = wire_index + 1
-        module_index = module_index + 1
-        log(wire_index, is_vec(wire_index), tk_vec(wire_index))
     }
-    temp_index(stage_index) = wire_index
-    stage_index = stage_index + 1
 
-    for(i <- 0 until 6){
-        if(i == 5){
+    for(i <- 0 until stage_num){
+        if(i == stage_num-1){
             stall_table(i) := Mux(busy_table(i), !io.output.ready, false.B)
         } else {
             stall_table(i) := Mux(busy_table(i), stall_table(i + 1), false.B)
